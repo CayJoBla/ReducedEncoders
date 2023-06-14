@@ -23,10 +23,6 @@ def preprocess(dataset=None, split=None, tokenizer=None, train_size=None, test_s
     data = load_dataset(dataset) if split is None else load_dataset(dataset, split) # Load
     data = data.shuffle(seed=42)            # Shuffle the dataset
 
-    # Downsample to test
-    data = data["train"].train_test_split(train_size=0.001, test_size=None, seed=42)
-    data.pop("test")
-
     ## Tokenize the data
     def tokenize(batch):
         return tokenizer(batch["text"])
