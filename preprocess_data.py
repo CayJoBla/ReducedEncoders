@@ -6,31 +6,33 @@ from datasets import load_dataset
 from huggingface_hub import get_full_repo_name
 
 
-def prep_data(dataset=None, split=None, tokenizer=None, train_size=None, test_size=0.15, chunk_size=128, mlm_probability=0.15):
+def preprocess(dataset=None, split=None, tokenizer=None, train_size=None, test_size=0.15, chunk_size=128, 
+               mlm_probability=0.15, repo_name=None):
     ## Load tokenizer
     print("Load tokenizer...")
+    if tokenizer is None: tokenizer = "bert-base-uncased"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
     ## Load data and preprocess
     # Define default values
     if dataset is None: dataset = "wikipedia"
-    if split is None: dataset = "20220301.en"
+    if split is None and dataset == "wikipedia": split = "20220301.en"
     dataset_name = dataset.split("/")[-1]
 
     print(f"Loading the {split} split of the {dataset} dataset...")
-    data = load_dataset(dataset, split)     # Load
+    data = load_dataset(dataset) if split is None else load_dataset(dataset, split) # Load
+    data = data.shuffle(seed=42)            # Shuffle the dataset
 
-    # Shuffle and split
-    split_dataset = data["train"].train_test_split(train_size=train_size, 
-                                                   test_size=test_size, 
-                                                   seed=42)  
+    # Downsample to test
+    data = data["train"].train_test_split(train_size=0.001, test_size=None, seed=42)
+    data.pop("test")
 
     ## Tokenize the data
     def tokenize(batch):
         return tokenizer(batch["text"])
 
     print("Tokenize the dataset...")
-    tokenized_dataset = split_dataset.map(tokenize, batched=True, remove_columns=["id", "url", "title", "text"])
+    tokenized_dataset = data.map(tokenize, batched=True, remove_columns=["id", "url", "title", "text"])
 
     ## Chunk the data
     def chunk_tokens(batch):
@@ -48,6 +50,12 @@ def prep_data(dataset=None, split=None, tokenizer=None, train_size=None, test_si
 
     print("Chunk the data...")
     lm_dataset = tokenized_dataset.map(chunk_tokens, batched=True)
+
+    # Shuffle and split into train-test sets
+    print("Split the data into train and test sets...")
+    lm_dataset = lm_dataset["train"].train_test_split(train_size=train_size, 
+                                                      test_size=test_size, 
+                                                      seed=42)  
 
     # Mask the test data once to reduce randomness at each evaluation
     def insert_random_mask(batch):
@@ -69,7 +77,7 @@ def prep_data(dataset=None, split=None, tokenizer=None, train_size=None, test_si
     
     print("Push dataset to hub...")
     if repo_name is None:
-        repo_name = f"{dataset_name}_tokenized"
+        repo_name = f"{dataset_name}-tokenized"
     repo_name = get_full_repo_name(repo_name)
     lm_dataset.push_to_hub(repo_name)
 
@@ -94,13 +102,6 @@ if __name__ == "__main__":
         '--tokenizer',
         '-t',
         help=("The tokenizer to use for preprocessing. Default is 'bert-base-uncased'."),
-        type=str,
-        default=None
-    )
-    parser.add_argument(
-        '--repo_name',
-        '-r',
-        help=("The HuggingFace repository to push the dataset to. Default is '{dataset_name}-tokenized'."),
         type=str,
         default=None
     )
@@ -132,7 +133,14 @@ if __name__ == "__main__":
         type=float,
         default=0.15
     )
+    parser.add_argument(
+        '--repo_name',
+        '-r',
+        help=("The HuggingFace repository to push the dataset to. Default is '{dataset_name}-tokenized'."),
+        type=str,
+        default=None
+    )
 
     kwargs = parser.parse_args()
 
-    prep_data(**vars(kwargs))
+    preprocess(**vars(kwargs))
