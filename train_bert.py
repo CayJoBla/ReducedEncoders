@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 
 # HF imports
-from transformers import BertTokenizer, DataCollatorForLanguageModeling, default_data_collator, get_scheduler
+from transformers import BertTokenizer, AutoModelForMaskedLM, DataCollatorForLanguageModeling, default_data_collator, get_scheduler
 from datasets import load_dataset
 from accelerate import Accelerator
 from huggingface_hub import get_full_repo_name, Repository
@@ -103,7 +103,11 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
 
     ## Load the latest reduced model
     print("Load model...")
-    model = BertReducedForMaskedLM.from_pretrained(model_checkpoint)
+    try:
+        model = BertReducedForMaskedLM.from_pretrained(model_checkpoint)
+    except:
+        print("Could not load BertReducedForMaskedLM model, attempting load with AutoModelForMaskedLM...")
+        model = AutoModelForMaskedLM.from_pretrained(model_checkpoint)
     tokenizer = BertTokenizer.from_pretrained(model_checkpoint)
     
     ## Get dataloaders
