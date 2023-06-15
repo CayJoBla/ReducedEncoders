@@ -348,11 +348,12 @@ if __name__ == "__main__":
         default=1e-8
     )
     parser.add_argument(
-        '--push_to_hub',
-        '-p',
-        help=("Whether to push the model to the HuggingFace hub periodically. Default is True."),
-        type=bool,
-        default=True
+        '--no_push',
+        '-np',
+        help=("Indicates that the training model should not be pushed to the HuggingFace hub. Default is False."),
+        dest='push_to_hub',
+        default=True,
+        action="store_false"
     )   
     parser.add_argument(
         '--repo_name',
