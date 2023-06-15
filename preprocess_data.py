@@ -6,7 +6,7 @@ from datasets import load_dataset
 from huggingface_hub import get_full_repo_name
 
 
-def preprocess(dataset=None, split=None, tokenizer=None, train_size=None, test_size=0.15, chunk_size=128, 
+def preprocess(dataset=None, split=None, tokenizer=None, train_size=None, test_size=0.15, chunk_size=64, 
                mlm_probability=0.15, repo_name=None):
     ## Load tokenizer
     print("Load tokenizer...")
@@ -118,9 +118,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--chunk_size',
         '-c',
-        help=("The number of tokens to include in each data chunk. Default is 128"),
+        help=("The number of tokens to include in each data chunk. Default is 64"),
         type=int,
-        default=128
+        default=64
     )
     parser.add_argument(
         '--mlm_probability',
