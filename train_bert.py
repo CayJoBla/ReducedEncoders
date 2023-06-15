@@ -74,6 +74,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
             perplexity = math.exp(mean_loss)
         except OverflowError:
             perplexity = float("inf")
+        model.train()
         return mean_loss, perplexity
     
     def save_model(model, output_dir, repo=None):
