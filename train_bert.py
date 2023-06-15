@@ -99,7 +99,6 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
 
     model_checkpoint = model
     model_name = model_checkpoint.split("/")[-1]
-    dataset_name = dataset.split("/")[-1]
 
     ## Load the latest reduced model
     print("Load model...")
@@ -160,6 +159,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     # Set up HF Hub paramters
     output_dir = model_name if output_dir is None else output_dir
     if push_to_hub:
+        print("Push to hub:", push_to_hub)
         print("Set up HuggingFace hub parameters...")
         if repo_name is None: repo_name = get_full_repo_name(model_name)
         repo = Repository(output_dir, clone_from=repo_name)
