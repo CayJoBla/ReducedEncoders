@@ -134,9 +134,9 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         init_kwargs= {"wandb":{"name":run_name}} if run_name else {}
         accelerator.init_trackers(
             project_name=wandb_project, 
-            config=model.config,
             init_kwargs=init_kwargs
         )
+        print("")
     else:
         accelerator = Accelerator()
 
@@ -160,7 +160,6 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     # Set up HF Hub paramters
     output_dir = model_name if output_dir is None else output_dir
     if push_to_hub:
-        print("Push to hub:", push_to_hub)
         print("Set up HuggingFace hub parameters...")
         if repo_name is None: repo_name = get_full_repo_name(model_name)
         repo = Repository(output_dir, clone_from=repo_name)
@@ -168,7 +167,6 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         repo = None
 
     # Print training setup to console
-    print("")
     print("Model name:", model_name)
     print("Training data batches:", len(train_dataloader))
     print("Evaluation data batches:", len(test_dataloader))
