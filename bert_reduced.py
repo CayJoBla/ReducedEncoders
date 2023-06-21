@@ -1,4 +1,4 @@
-# bert_reduced_model.py
+# bert_reduced.py
 
 import torch
 from torch import nn
