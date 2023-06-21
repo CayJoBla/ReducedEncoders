@@ -22,7 +22,7 @@ class BertReduce(nn.Module):
             dimensionality over multiple linear layers.
     """
     def __init__(self, config, inter_sizes=()):
-        super().__init__()
+        super(BertReduce, self).__init__()
         input_size = config.hidden_size
         output_size = config.reduced_size
         
@@ -44,7 +44,7 @@ class BertReductionLayer(nn.Module):
     and a dropout layer.
     """
     def __init__(self, input_size, output_size, config):
-        super().__init__()
+        super(BertReductionLayer, self).__init__()
         self.dense = nn.Linear(input_size, output_size)
         if isinstance(config.hidden_act, str):
             self.reduce_act_fn = ACT2FN[config.hidden_act]
@@ -62,7 +62,7 @@ class BertReductionLayer(nn.Module):
 # Recreate the MLM model head, but with the reduced hidden state size
 class BertReducedMLMHead(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super(BertReducedMLMHead, self).__init__()
         self.predictions = BertReducedLMPredictionHead(config)
 
     def forward(self, sequence_output):
@@ -72,7 +72,7 @@ class BertReducedMLMHead(nn.Module):
 
 class BertReducedLMPredictionHead(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super(BertReducedLMPredictionHead, self).__init__()
         self.transform = BertReducedPredictionHeadTransform(config)
         self.decoder = nn.Linear(config.reduced_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
@@ -87,7 +87,7 @@ class BertReducedLMPredictionHead(nn.Module):
     
 class BertReducedPredictionHeadTransform(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super(BertReducedPredictionHeadTransform, self).__init__()
         self.dense = nn.Linear(config.reduced_size, config.reduced_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
@@ -111,7 +111,7 @@ class BertReducedModel(BertPreTrainedModel):
             the sizes of the sequence of intermediate linear layers in the dimensionality reduction
     """
     def __init__(self, config, inter_sizes=(), **kwargs):
-        super().__init__(config)
+        super(BertReducedModel, self).__init__(config)
 
         if not hasattr(self.config, 'reduced_size'):
             self.config.reduced_size = 48
@@ -122,7 +122,7 @@ class BertReducedModel(BertPreTrainedModel):
         self.reduce = BertReduce(config, inter_sizes=inter_sizes)
 
     def from_pretrained(self, *args, ignore_mismatched_sizes=True, **kwargs):    # Default to True instead
-        super().from_pretrained(*args, ignore_mismatched_sizes=ignore_mismatched_sizes, **kwargs)
+        super(BertReducedModel, self).from_pretrained(*args, ignore_mismatched_sizes=ignore_mismatched_sizes, **kwargs)
 
 
 # Create the full MLM 
@@ -132,7 +132,7 @@ class BertReducedForMaskedLM(BertReducedModel):
     """
     def __init__(self, config, inter_sizes=(512,256,128,64)):
         # Initialize BERT and reduction layers
-        super().__init__(config, inter_sizes=inter_sizes, add_pooling_layer=False)
+        super(BertReducedForMaskedLM, self).__init__(config, inter_sizes=inter_sizes, add_pooling_layer=False)
 
         self.cls = BertReducedMLMHead(config)   # Initialize model head
         self.post_init()                        # Initialize weights
@@ -196,7 +196,7 @@ class BertReducedForSequenceClassification(BertReducedModel):
     """
     def __init__(self, config, inter_sizes=(512,256,128,64)):
         # Initialize BERT and reduction layers
-        super().__init__(config, inter_sizes=inter_sizes, add_pooling_layer=True)
+        super(BertReducedForSequenceClassification, self).__init__(config, inter_sizes=inter_sizes, add_pooling_layer=True)
 
         if not hasattr(self.config, 'num_labels'):
             self.config.num_labels = 2
