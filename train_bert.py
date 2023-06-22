@@ -75,6 +75,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         except OverflowError:
             perplexity = float("inf")
         model.train()
+            
         return mean_loss, perplexity
     
     def save_model(model, output_dir, repo=None):
@@ -129,8 +130,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     # Define the Accelerator
     do_log = wandb_project is not None
     if do_log:
-        print(f"Logging to WandB project {wandb_project}...")
-        print("")
+        print(f"Logging to WandB project {wandb_project}...\n")
         accelerator = Accelerator(log_with="wandb")
         init_kwargs= {"wandb":{"name":run_name}} if run_name else {}
         accelerator.init_trackers(
@@ -294,10 +294,10 @@ if __name__ == "__main__":
     parser.add_argument(
         '--finetune_base',
         '-f',
-        help=("Whether to train the base BERT model. If False, the base model weights are frozen during training. Default is False."),
-        type=bool,
-        default=False
-    )
+        help=("Indicates that the base BERT model should be finetuned alongside the model head and reduction layers. Default is to freeze the base model weights."),
+        default=False,
+        action="store_true"
+    )  
     parser.add_argument(
         '--learning_rate', 
         '-lr',
