@@ -127,7 +127,8 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     optimizer = AdamW(model.parameters(), lr=learning_rate, eps=tol)
 
     # Define the Accelerator
-    if wandb_project is not None:
+    do_log = wandb_project is not None
+    if do_log:
         print(f"Logging to WandB project {wandb_project}...")
         print("")
         accelerator = Accelerator(log_with="wandb")
@@ -194,7 +195,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     # Record initial evaluation loss
     progress_bar = tqdm(range(len(test_dataloader)), desc=">>> Initial Evaluation")
     mean_loss, perplexity = evaluate(test_dataloader, progress_bar=progress_bar)
-    accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=0)
+    if do_log: accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=0)
     progress_bar.close()
 
     ## Training loop
@@ -215,14 +216,14 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
             lr_scheduler.step()
             optimizer.zero_grad()
 
-            accelerator.log({"train_loss":loss}, step=global_step)
+            if do_log: accelerator.log({"train_loss":loss}, step=global_step)
             progress_bar.update(1)
 
             # Evaluation
             if (logging_strat=="step" and global_step%logging_steps==0) or (logging_strat=="epoch" and i+1==num_update_steps_per_epoch):
                 eval_progress_bar = tqdm(range(len(test_dataloader)), desc=">>> Evaluation")
                 mean_loss, perplexity = evaluate(test_dataloader, progress_bar=eval_progress_bar)
-                accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=global_step)
+                if do_log: accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=global_step)
                 eval_progress_bar.close()
                 save_model(model, output_dir, repo)     # Save model
 
@@ -232,7 +233,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     if logging_strat=="step":   # If logging_strat = "epoch", we would have evaluated and saved already
         eval_progress_bar = tqdm(range(len(test_dataloader)), desc=">>> Final Evaluation")
         mean_loss, perplexity = evaluate(test_dataloader, progress_bar=eval_progress_bar)
-        accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=num_training_steps)
+        if do_log: accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=num_training_steps)
         eval_progress_bar.close()
         save_model(model, output_dir, repo)   # Save model
 
