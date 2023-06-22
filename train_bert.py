@@ -237,7 +237,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         eval_progress_bar.close()
         save_model(model, output_dir, repo)   # Save model
 
-    accelerator.end_training()
+    if do_log: accelerator.end_training()
 
 
 if __name__ == "__main__":
