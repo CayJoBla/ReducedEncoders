@@ -68,12 +68,21 @@ class BertReducedMLMHead(BertOnlyMLMHead):
         
         super().__init__(BertConfig.from_dict(config_dict))
     
-
-# Create the full MLM model
-class BertReducedForMaskedLM(BertPreTrainedModel):
+    
+class BertReducedModel(BertPreTrainedModel):
+    """
+    An abstract class for defining common methods between reduced BERT models.
+    
+    Args:
+        config (BertConfig): Configuration for the BERT model. Should also include the 
+            reduced_size parameter. If not, reduced_size defaults to 48. If config=None,
+            the config of _from_pretrained_base or the default BertConfig is used.
+        inter_sizes (tuple): A sequence of intermediate layer sizes as defined in BertReduce
+        _from_pretrained_base (str): A model name or path to a locally saved model to use as
+            the base BERT model for the full reduced model. Does not load the model head.
+    """
     def __init__(self, config=None, inter_sizes=(512,256,128,64), _from_pretrained_base=None, **kwargs):
         default_reduction = 48
-        
         if config is None:
             if _from_pretrained_base:
                 config = BertConfig.from_pretrained(_from_pretrained_base)
@@ -84,13 +93,45 @@ class BertReducedForMaskedLM(BertPreTrainedModel):
             config.reduced_size = default_reduction
             
         super().__init__(config)
+        self.config = config
         
         self._load_pretrained_base(_from_pretrained_base, **kwargs)
         self.reduce = BertReduce(config, inter_sizes=inter_sizes)
-        self.cls = BertReducedMLMHead(config)
+        self._load_head()
         
         self.post_init()
+    
+    def _load_pretrained_base(self, pretrained_model_name_or_path, *args, **kwargs):
+        """
+        Load the weights of a pretrained BERT model into the reduced model.
+        """
+        config = kwargs.pop("config", self.config)
         
+        if pretrained_model_name_or_path is None:
+            bert = BertModel(*args, config=config, **kwargs)
+        else:
+            bert = BertModel.from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+            
+        self.bert_name = pretrained_model_name_or_path
+        self.bert = bert
+        
+    def _load_head(self):
+        """
+        Load the head model for the task being done. This method should be overridden by derived class.
+        """
+        pass
+        
+    @classmethod
+    def from_pretrained(cls, *args, _from_pretrained_base=None, **kwargs):
+        model = super(BertReducedModel, cls).from_pretrained(*args, **kwargs)
+        
+        if _from_pretrained_base is not None:
+            config = kwargs.pop("config", model.config)
+            model._load_pretrained_base(_from_pretrained_base, *args, config=config, **kwargs)
+        return model
+    
+    
+class BertReducedForMaskedLM(BertReducedModel):
     def forward(self, *args, labels=None, **kwargs):
         return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
         
@@ -117,34 +158,11 @@ class BertReducedForMaskedLM(BertPreTrainedModel):
             attentions=outputs.attentions,
         )
     
-    @classmethod
-    def from_pretrained(cls, *args, _from_pretrained_base=None, **kwargs):
-        model = super(BertReducedForMaskedLM, cls).from_pretrained(*args, **kwargs)
-        
-        if _from_pretrained_base is not None:
-            config = kwargs.pop("config", model.config)
-            add_pooling_layer = kwargs.pop("add_pooling_layer", False)
-            model._load_pretrained_base(_from_pretrained_base,
-                                        *args,
-                                        config=config,
-                                        add_pooling_layer=add_pooling_layer,
-                                        **kwargs)
-        return model
+    def _load_head(self):
+        self.cls = BertReducedMLMHead(self.config)
     
-    def _load_pretrained_base(self, pretrained_model_name_or_path, *args, **kwargs):
-        config = kwargs.pop("config", self.config)
-        add_pooling_layer = kwargs.pop("add_pooling_layer", False)
-        
-        if pretrained_model_name_or_path is None:
-            bert = BertModel(*args,
-                             config=config, 
-                             add_pooling_layer=add_pooling_layer,
-                             **kwargs)
-        else:
-            bert = BertModel.from_pretrained(pretrained_model_name_or_path, 
-                                             *args, 
-                                             config=config, 
-                                             add_pooling_layer=add_pooling_layer,
-                                             **kwargs)
-        self.bert_name = pretrained_model_name_or_path
-        self.bert = bert
+    def _load_pretrained_base(self, pretrained_model_name_or_path, *args, add_pooling_layer=False, **kwargs):
+        super()._load_pretrained_base(pretrained_model_name_or_path, 
+                                      *args, 
+                                      add_pooling_layer=add_pooling_layer, 
+                                      **kwargs)
