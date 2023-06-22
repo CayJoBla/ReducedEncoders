@@ -131,7 +131,11 @@ class BertReducedModel(BertPreTrainedModel):
         return model
     
     
+# Create the full model
 class BertReducedForMaskedLM(BertReducedModel):
+    """
+    The reduced BERT model for masked language modelling.
+    """
     def forward(self, *args, labels=None, **kwargs):
         return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
         
@@ -166,3 +170,55 @@ class BertReducedForMaskedLM(BertReducedModel):
                                       *args, 
                                       add_pooling_layer=add_pooling_layer, 
                                       **kwargs)
+        
+
+class BertReducedForSequenceClassification(BertReducedModel):
+    """
+    The reduced BERT model for sequence classification.
+    """ 
+    def forward(self, *args, labels=None, **kwargs):
+        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+        
+        outputs = self.bert(*args, **kwargs, return_dict=return_dict)
+
+        pooler_output = outputs[1]
+        reduced_output = self.reduce(pooler_output)
+        logits = self.classifier(reduced_output)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = nn.MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = nn.BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+    
+    def _load_head(self):
+        if not hasattr(self.config, 'num_labels'):
+            self.config.num_labels = 2
+        self.classifier = nn.Linear(in_features=self.config.reduced_size, out_features=self.config.num_labels)
