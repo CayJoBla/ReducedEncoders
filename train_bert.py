@@ -15,11 +15,14 @@ from bert_reduced import BertReducedForMaskedLM
 from tqdm.auto import tqdm
 import math
 import argparse
+import os
+
 
 def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, test_size=None, batch_size=64, num_epochs=1, 
-          learning_rate=5e-5, tol=1e-8, finetune_base=False, scheduler_type="linear", num_warmup_steps=0, logging_steps=1000, 
-          logging_strat="epoch", output_dir=None, push_to_hub=True, repo_name=None, wandb_project=None, run_name=None):
-
+          learning_rate=5e-5, tol=1e-8, finetune_base=False, scheduler_type="linear", num_warmup_steps=0, train_log_steps=50, 
+          eval_log_steps=1000, logging_strat="epoch", save_every="epoch", output_dir=None, push_to_hub=True, repo_name=None, 
+          wandb_project=None, run_name=None):
+    
     def get_dataloaders(dataset, num_shards, index, train_size, test_size, batch_size):
         print("Load data...")
         lm_dataset = load_dataset(dataset)  
@@ -181,8 +184,9 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
     print("Tolerance (epsilon):", tol)
     print("Learning rate scheduler:", scheduler_type)
     print("Warmup steps:", num_warmup_steps)
-    print("Logging by:", logging_strat)
-    if logging_strat == "step": print("Logging steps:", logging_steps)
+    print("Training logging steps:", train_log_steps)
+    print("Log evaluation by:", logging_strat)
+    if logging_strat == "step": print("Evaluation logging steps:", eval_log_steps)
     print("Model output directory:", output_dir)
     print("Push to HuggingFace hub:", push_to_hub)
     if push_to_hub: print("Repository name:", repo_name)
@@ -216,16 +220,20 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
             lr_scheduler.step()
             optimizer.zero_grad()
 
-            if do_log: accelerator.log({"train_loss":loss}, step=global_step)
+            if do_log and global_step%train_log_steps == 0: 
+                accelerator.log({"train_loss":loss}, step=global_step)
             progress_bar.update(1)
 
             # Evaluation
-            if (logging_strat=="step" and global_step%logging_steps==0) or (logging_strat=="epoch" and i+1==num_update_steps_per_epoch):
+            is_epoch = i+1==num_update_steps_per_epoch      # Is this step the end of an epoch?
+            if (logging_strat=="step" and global_step%eval_log_steps==0) or (logging_strat=="epoch" and is_epoch):
                 eval_progress_bar = tqdm(range(len(test_dataloader)), desc=">>> Evaluation")
                 mean_loss, perplexity = evaluate(test_dataloader, progress_bar=eval_progress_bar)
                 if do_log: accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=global_step)
                 eval_progress_bar.close()
-                save_model(model, output_dir, repo)     # Save model
+
+                if (save_every=="log") or (save_every=="epoch" and is_epoch): 
+                    save_model(model, output_dir, repo)     # Save model
 
         progress_bar.close()    # Finish the epoch
 
@@ -235,6 +243,7 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         mean_loss, perplexity = evaluate(test_dataloader, progress_bar=eval_progress_bar)
         if do_log: accelerator.log({"eval_loss":mean_loss, "eval_perplexity":perplexity}, step=num_training_steps)
         eval_progress_bar.close()
+
         save_model(model, output_dir, repo)   # Save model
 
     if do_log: accelerator.end_training()
@@ -272,14 +281,12 @@ if __name__ == "__main__":
     )  
     parser.add_argument(
         '--train_size',
-        '-a',
         help=("The proportion of the training data shard to use during training. Default is the entire training data shard selected."),
         type=float,
         default=None
     )   
     parser.add_argument(
         '--test_size',
-        '-c',
         help=("The proportion of the test data shard to use for evaluation. Default is the entire test data shard selected."),
         type=float,
         default=None
@@ -306,6 +313,13 @@ if __name__ == "__main__":
         default=5e-5
     )
     parser.add_argument(
+        '--tol',
+        '-t',
+        help=("The tolerance for convergence in the optimizer. Default is 1e-8."),
+        type=float,
+        default=1e-8
+    )
+    parser.add_argument(
         '--num_epochs',
         '-n',
         help=("The number of epochs to use in training. Default is 1."),
@@ -314,42 +328,42 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--scheduler_type',
-        '-s',
         help=("The name of the type of learning rate scheduler to use in optimization. Default is 'linear'."),
         type=str,
         default="linear"
     )
     parser.add_argument(
         '--num_warmup_steps',
-        '-w',
         help=("The number of warmup steps for the learning rate scheduler. Default is 0."),
         type=int,
         default=0
     )
     parser.add_argument(
-        '--logging_steps',
-        '-ls',
-        help=("The number of global optimization steps between logging. Default is 1000."),
+        '--train_log_steps',
+        help=("The number of global optimization steps between logging the training loss. Default is 50."),
+        type=int,
+        default=50
+    )
+    parser.add_argument(
+        '--eval_log_steps',
+        help=("The number of global optimization steps between logging evaluation on the test set. Default is 1000."),
         type=int,
         default=1000
     )
     parser.add_argument(
         '--logging_strat',
-        '-l',
-        help=("The strategy to use for logging, either 'epoch' or 'step'. Default is 'epoch'"),
+        help=("The strategy to use for logging, either 'epoch' or 'step'. Default is 'epoch'."),
         type=str,
         default="epoch"
     )
     parser.add_argument(
-        '--tol',
-        '-t',
-        help=("The tolerance for convergence in the optimizer. Default is 1e-8."),
-        type=float,
-        default=1e-8
+        '--save_every',
+        help=("When to save the model, either 'epoch' to save each epoch or 'log' to save each time evaluation on the test set is logged. Default is 'epoch'."),
+        type=str,
+        default="epoch"
     )
     parser.add_argument(
-        '--no_push',
-        '-np',
+        '--no_push_to_hub',
         help=("Indicates that the training model should not be pushed to the HuggingFace hub. Default is False."),
         dest='push_to_hub',
         default=True,
@@ -357,7 +371,7 @@ if __name__ == "__main__":
     )   
     parser.add_argument(
         '--repo_name',
-        '-repo',
+        '-r',
         help=("The name of the HuggingFace repository to push to. Defaults to the name of the model."),
         type=str,
         default=None

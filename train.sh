@@ -5,9 +5,13 @@ python train_bert.py \
     --index=$1 \
     --batch_size=128 \
     --num_epochs=1 \
+    --learning_rate=5e-5 \
+    --tol=1e-8 \
     --scheduler_type="linear" \
     --num_warmup_steps=0 \
+    --train_log_steps=50 \
+    --eval_log_steps=3000 \
     --logging_strat="step" \
-    --logging_steps=3000 \
+    --save_every="epoch" \
     --wandb_project="bert-base-uncased-reduced" \
     --run_name="reduced-s$1" \
