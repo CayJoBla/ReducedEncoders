@@ -5,7 +5,7 @@ from torch import nn
 from transformers import BertModel, BertConfig
 from transformers.activations import ACT2FN
 from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertOnlyMLMHead
-from transformers.modeling_outputs import MaskedLMOutput
+from transformers.modeling_outputs import MaskedLMOutput, SequenceClassifierOutput
 
 
 # Create a module to reduce the dimension size of the hidden state
@@ -136,10 +136,40 @@ class BertReducedForMaskedLM(BertReducedModel):
     """
     The reduced BERT model for masked language modelling.
     """
-    def forward(self, *args, labels=None, **kwargs):
-        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
-        outputs = self.bert(*args, **kwargs, return_dict=return_dict)
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
         
         last_hidden_state = outputs[0]        # Sequence output
         reduced_output = self.reduce(last_hidden_state)
@@ -176,10 +206,40 @@ class BertReducedForSequenceClassification(BertReducedModel):
     """
     The reduced BERT model for sequence classification.
     """ 
-    def forward(self, *args, labels=None, **kwargs):
-        return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
-        outputs = self.bert(*args, **kwargs, return_dict=return_dict)
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooler_output = outputs[1]
         reduced_output = self.reduce(pooler_output)
