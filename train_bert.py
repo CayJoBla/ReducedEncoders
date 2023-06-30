@@ -86,7 +86,6 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(output_dir, save_function=accelerator.save)
         if accelerator.is_main_process:
-            tokenizer.save_pretrained(output_dir)
             if push_to_hub:
                 commit_message = ""
                 if logging_strat=="epoch":
@@ -169,6 +168,11 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
         repo = Repository(output_dir, clone_from=repo_name)
     else:
         repo = None
+
+    # Update config
+    model.save_pretrained(output_dir)
+    if push_to_hub:
+        repo.push_to_hub(commit_message="Update model config", blocking=False)
 
     # Print training setup to console
     print("Model name:", model_name)
