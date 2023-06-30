@@ -3,3 +3,4 @@ wandb/
 bert-base-uncased*/
 .ipynb_checkpoints/
 __pycache__/
+test*
