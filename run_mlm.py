@@ -38,7 +38,7 @@ from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
-    AutoModelForMaskedLM,
+    #AutoModelForMaskedLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
@@ -51,6 +51,8 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
+from bert_reduced import BertReducedForMaskedLM
+from huggingface_hub import Repository, get_full_repo_name
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.31.0.dev0")
@@ -397,7 +399,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = AutoModelForMaskedLM.from_pretrained(
+        model = BertReducedForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
@@ -407,8 +409,7 @@ def main():
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
         )
     else:
-        logger.info("Training new model from scratch")
-        model = AutoModelForMaskedLM.from_config(config)
+        raise ValueError("Must supply a model_name_or_path")    # ADDED: Only support the use of model name/path
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -583,6 +584,10 @@ def main():
         pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
     )
 
+    # Freeze the base model weights
+    for param in model.base_model.parameters():
+        param.requires_grad = False
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
@@ -647,6 +652,22 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+    # # ADDED: Push to my model branch
+    # repo_name = training_args.output_dir
+    # branch = "mlm"
+    # repo = Repository(training_args.output_dir, clone_from=get_full_repo_name(repo_name))
+    # repo.git_checkout(branch)
+
+    # confirmation = input(f"Is '{repo.current_branch}' the branch you wish to push to? (y)/n: ")
+    # if confirmation.lower() == "n":
+    #     print("Cancelling push...")
+    #     return 1
+        
+    # repo.git_add()
+    # commit_message = "Save model pretrained on the wikipedia dataset"
+    # repo.git_commit(commit_message=commit_message)
+    # repo.git_push(f'origin {branch}')
 
 
 def _mp_fn(index):
