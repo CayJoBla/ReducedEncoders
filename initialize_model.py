@@ -6,11 +6,11 @@ import argparse
 from transformers import AutoTokenizer, BertTokenizer, BertConfig
 from huggingface_hub import get_full_repo_name, Repository
 
-from bert_reduced import BertReducedForMaskedLM, BertReducedForSequenceClassification
+from bert_reduced import BertReducedForSequenceClassification
 
 
 def main(base_model=None, reduced_size=48, task="fill-mask", model_name=None, tokenizer=None, output_dir=None, 
-         commit_message=None, push_to_main=True, push_to_branch=True, branch_name="initial"):
+         commit_message=None, push_to_main=True, push_to_branch=False, branch_name="initial"):
     # Get model name, output directory, and full repository name
     if model_name is None:
         if base_model is None:
@@ -30,12 +30,7 @@ def main(base_model=None, reduced_size=48, task="fill-mask", model_name=None, to
     tokenizer = AutoTokenizer.from_pretrained(tokenizer) if tokenizer else BertTokenizer()
 
     # Create the new model
-    if task == "fill-mask":
-        model = BertReducedForMaskedLM(config=config, _from_pretrained_base=base_model)
-    elif task == "text-classification":
-        model = BertReducedForSequenceClassification(config=config, _from_pretrained_base=base_model)
-    else:
-        raise ValueError("'task' parameter must be 'mlm' or 'text-classification'")
+    model = BertReducedForSequenceClassification(config=config, _from_pretrained_base=base_model)
     
     # Get repository
     if push_to_main:
@@ -74,12 +69,6 @@ if __name__ == "__main__":
         help=("The dimension of the output of the reduced model. Default is 48."),
         type=int,
         default=48
-    )
-    parser.add_argument(
-        '--task',
-        help=("The task that the new model is intended for ('fill-mask' or 'text-classification'). Default is 'fill-mask'."),
-        type=str,
-        default='fill-mask'
     )
     parser.add_argument(
         '--model_name',
