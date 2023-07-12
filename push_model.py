@@ -12,7 +12,6 @@ def main(local_dir=None, branch='main', verify=False, commit_message=None, push=
             print("Cancelling push...")
             return 1
         
-    repo.git_pull()
     repo.git_add()
 
     commit_message = commit_message if commit_message else "Save model"
