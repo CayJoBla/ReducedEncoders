@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from transformers import BertModel, BertConfig
 from transformers.activations import ACT2FN
-from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertOnlyMLMHead
+from transformers.models.bert.modeling_bert import BertPreTrainedModel, BertPreTrainingHeads, BertForPreTrainingOutput
 from transformers.modeling_outputs import MaskedLMOutput, SequenceClassifierOutput
 
 
@@ -59,17 +59,46 @@ class BertReductionLayer(nn.Module):
         return output
     
 
-# Recreate the MLM model head, but with the reduced hidden state size
-class BertReducedMLMHead(BertOnlyMLMHead):
+# Recreate the model heads, but with the reduced hidden state size
+class BertReducedLMPredictionHead(nn.Module):
     def __init__(self, config):
-        # Create a copy of the config with hidden_size=reduced_size to reshape default head
-        config_dict = config.to_diff_dict()
-        config_dict["hidden_size"] = config_dict.pop("reduced_size")
-        
-        super().__init__(BertConfig.from_dict(config_dict))
+        super().__init__()
+        self.transform = BertReducedPredictionHeadTransform(config)
+        self.decoder = nn.Linear(config.reduced_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
     
+class BertReducedPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.reduced_size, config.reduced_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.reduced_size, eps=config.layer_norm_eps)
     
-class BertReducedModel(BertPreTrainedModel):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+    
+
+class BertReducedPreTrainingHeads(BertPreTrainingHeads):
+    def __init__(self, config):
+        super(BertPreTrainingHeads, self).__init__()
+        self.predictions = BertReducedLMPredictionHead(config)
+        self.seq_relationship = nn.Linear(config.reduced_size, 2)
+
+    
+class BertReducedForPreTraining(BertPreTrainedModel):
     """
     An abstract class for defining common methods between reduced BERT models.
     
@@ -89,196 +118,153 @@ class BertReducedModel(BertPreTrainedModel):
                 config.reduced_size = default_reduction
             else:
                 config = BertConfig(reduced_size=default_reduction)
-        elif type(config) == BertConfig and not hasattr(config, 'reduced_size'):
-            config.reduced_size = default_reduction
-            
-        super().__init__(config)
+        elif type(config) == BertConfig:
+            if not hasattr(config, 'reduced_size'):
+                config.reduced_size = default_reduction
+        else:
+            raise ValueError("`config` must be a BertConfig object or NoneType.")
         self.config = config
+
+        super().__init__(config)
         
         self._load_pretrained_base(_from_pretrained_base, **kwargs)
         self.reduce = BertReduce(config, inter_sizes=inter_sizes)
-        self._load_head()
+        self.cls = BertReducedPreTrainingHeads(config)
         
         self.post_init()
     
     def _load_pretrained_base(self, pretrained_model_name_or_path, *args, **kwargs):
-        """
-        Load the weights of a pretrained BERT model into the reduced model.
-        """
-        config = kwargs.pop("config", self.config)
-        
-        if pretrained_model_name_or_path is None:
-            bert = BertModel(*args, config=config, **kwargs)
-        else:
-            bert = BertModel.from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
-            
+        """Load the weights of a pretrained BERT model into the reduced model.""" 
         self.bert_name = pretrained_model_name_or_path
-        self.bert = bert
-        
-    def _load_head(self):
-        """
-        Load the head model for the task being done. This method should be overridden by derived class.
-        """
-        pass
-        
+        self.bert = BertModel(self.config, *args, **kwargs) if pretrained_model_name_or_path is None else \
+                    BertModel.from_pretrained(pretrained_model_name_or_path, *args, config=self.config, **kwargs)
+    
     @classmethod
     def from_pretrained(cls, *args, _from_pretrained_base=None, **kwargs):
-        model = super(BertReducedModel, cls).from_pretrained(*args, **kwargs)
+        model = super(BertReducedForPreTraining, cls).from_pretrained(*args, **kwargs)
         
         if _from_pretrained_base is not None:
             config = kwargs.pop("config", model.config)
             model._load_pretrained_base(_from_pretrained_base, *args, config=config, **kwargs)
         return model
     
-    
-# Create the full model
-class BertReducedForMaskedLM(BertReducedModel):
-    """
-    The reduced BERT model for masked language modelling.
-    """
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None
-    ):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 
+                labels=None, next_sentence_label=None, output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         outputs = self.bert(
-            input_ids=input_ids,
+            input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
-        last_hidden_state = outputs[0]        # Sequence output
-        reduced_output = self.reduce(last_hidden_state)
-        prediction_scores = self.cls(reduced_output)
 
-        # Compute loss
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
+        sequence_output, pooled_output = outputs[:2]
+        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output)
+        prediction_scores, seq_relationship_score = self.cls(reduced_seq, reduced_pooled)
+
+        total_loss = None
+        if labels is not None and next_sentence_label is not None:
+            loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
 
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
+        return BertForPreTrainingOutput(
+            loss=total_loss,
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
     
-    def _load_head(self):
-        self.cls = BertReducedMLMHead(self.config)
-    
-    def _load_pretrained_base(self, pretrained_model_name_or_path, *args, add_pooling_layer=False, **kwargs):
-        super()._load_pretrained_base(pretrained_model_name_or_path, 
-                                      *args, 
-                                      add_pooling_layer=add_pooling_layer, 
-                                      **kwargs)
+
+# class BertReducedForSequenceClassification(BertReducedModel):
+#     """
+#     The reduced BERT model for sequence classification.
+#     """ 
+#     def forward(
+#         self,
+#         input_ids=None,
+#         attention_mask=None,
+#         token_type_ids=None,
+#         position_ids=None,
+#         head_mask=None,
+#         inputs_embeds=None,
+#         encoder_hidden_states=None,
+#         encoder_attention_mask=None,
+#         past_key_values=None,
+#         use_cache=None,
+#         output_attentions=None,
+#         output_hidden_states=None,
+#         return_dict=None,
+#         labels=None
+#     ):
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
+#         outputs = self.bert(
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#             token_type_ids=token_type_ids,
+#             position_ids=position_ids,
+#             head_mask=head_mask,
+#             inputs_embeds=inputs_embeds,
+#             encoder_hidden_states=encoder_hidden_states,
+#             encoder_attention_mask=encoder_attention_mask,
+#             past_key_values=past_key_values,
+#             use_cache=use_cache,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
 
-class BertReducedForSequenceClassification(BertReducedModel):
-    """
-    The reduced BERT model for sequence classification.
-    """ 
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None
-    ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        outputs = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+#         pooler_output = outputs[1]
+#         reduced_output = self.reduce(pooler_output)
+#         logits = self.classifier(reduced_output)
 
-        pooler_output = outputs[1]
-        reduced_output = self.reduce(pooler_output)
-        logits = self.classifier(reduced_output)
+#         loss = None
+#         if labels is not None:
+#             if self.config.problem_type is None:
+#                 if self.config.num_labels == 1:
+#                     self.config.problem_type = "regression"
+#                 elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+#                     self.config.problem_type = "single_label_classification"
+#                 else:
+#                     self.config.problem_type = "multi_label_classification"
 
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.config.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+#             if self.config.problem_type == "regression":
+#                 loss_fct = nn.MSELoss()
+#                 if self.config.num_labels == 1:
+#                     loss = loss_fct(logits.squeeze(), labels.squeeze())
+#                 else:
+#                     loss = loss_fct(logits, labels)
+#             elif self.config.problem_type == "single_label_classification":
+#                 loss_fct = nn.CrossEntropyLoss()
+#                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+#             elif self.config.problem_type == "multi_label_classification":
+#                 loss_fct = nn.BCEWithLogitsLoss()
+#                 loss = loss_fct(logits, labels)
+#         if not return_dict:
+#             output = (logits,) + outputs[2:]
+#             return ((loss,) + output) if loss is not None else output
 
-            if self.config.problem_type == "regression":
-                loss_fct = nn.MSELoss()
-                if self.config.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = nn.BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+#         return SequenceClassifierOutput(
+#             loss=loss,
+#             logits=logits,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
     
-    def _load_head(self):
-        if not hasattr(self.config, 'num_labels'):
-            self.config.num_labels = 2
-        self.classifier = nn.Linear(in_features=self.config.reduced_size, out_features=self.config.num_labels)
+#     def _load_head(self):
+#         if not hasattr(self.config, 'num_labels'):
+#             self.config.num_labels = 2
+#         self.classifier = nn.Linear(in_features=self.config.reduced_size, out_features=self.config.num_labels)
