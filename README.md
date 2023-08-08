@@ -1,1 +1,1 @@
-# Applying dimensionality reduction to the BERT language model
+# Apply dimensionality reduction to the BERT language model

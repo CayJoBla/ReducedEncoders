@@ -4,4 +4,4 @@ bert-base-uncased*/
 .ipynb_checkpoints/
 __pycache__/
 test*
-wikipedia-pretrain-processed
+data/
