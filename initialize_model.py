@@ -6,11 +6,11 @@ import argparse
 from transformers import AutoTokenizer, BertTokenizer, BertConfig
 from huggingface_hub import get_full_repo_name, Repository
 
-from bert_reduced import BertReducedForSequenceClassification
+from bert_reduced import BertReducedForPreTraining
 
 
-def main(base_model=None, reduced_size=48, task="fill-mask", model_name=None, tokenizer=None, output_dir=None, 
-         commit_message=None, push_to_main=True, push_to_branch=False, branch_name="initial"):
+def main(base_model=None, reduced_size=48, model_name=None, tokenizer=None, output_dir=None, 
+         commit_message=None, push_to_branch=False, branch_name="initial"):
     # Get model name, output directory, and full repository name
     if model_name is None:
         if base_model is None:
@@ -30,29 +30,23 @@ def main(base_model=None, reduced_size=48, task="fill-mask", model_name=None, to
     tokenizer = AutoTokenizer.from_pretrained(tokenizer) if tokenizer else BertTokenizer()
 
     # Create the new model
-    model = BertReducedForSequenceClassification(config=config, _from_pretrained_base=base_model)
+    model = BertReducedForPreTraining(config=config, _from_pretrained_base=base_model)
     
     # Get repository
-    if push_to_main:
-        repo = Repository(output_dir, clone_from=repo_name, revision="main")
-    elif push_to_branch:
+    if push_to_branch:
         repo = Repository(output_dir, clone_from=repo_name, revision=branch_name)
     
     # Save the model and tokenizer locally
     model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
 
-    if not push_to_main and not push_to_branch: 
-        return
+    if not push_to_branch: return
 
     # Push model to the hub
     commit_message = commit_message if commit_message else \
         f"Initialize the reduced model with pretrained weights from the {base_model} base model"
-    if push_to_main: 
-        repo.push_to_hub(commit_message=commit_message, blocking=False)
-    if push_to_branch:
-        repo.git_checkout(branch_name)
-        repo.push_to_hub(commit_message=commit_message, blocking=False)
+    repo.git_checkout(branch_name)
+    repo.push_to_hub(commit_message=commit_message, blocking=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -89,17 +83,9 @@ if __name__ == "__main__":
         default=None
     )
     parser.add_argument(
-        '--no_push_to_main',
-        '-n',
-        help=("Indicates that the model should not be pushed to the main branch. Default is False."),
-        dest='push_to_main',
-        default=True,
-        action="store_false"
-    )  
-    parser.add_argument(
         '--push_to_branch',
         '-b',
-        help=("Indicates that the model should be pushed to a non-main branch. Default is False."),
+        help=("Indicates that the model should be pushed to a branch of the model. Default is False."),
         default=False,
         action="store_true"
     )  
