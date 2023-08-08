@@ -2,13 +2,16 @@
 
 from transformers import set_seed, AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
+from huggingface_hub import get_full_repo_name
 import random
 import math
 import argparse
 import torch
+import time
 
-def preprocess(dataset=None, split=None, tokenizer=None, revision="main", shard_size=100_000,
-               train_size=None, test_size=0.1, seed=42, output_dir=None, verbose=False):
+def preprocess(dataset=None, split=None, tokenizer=None, revision="main", num_shards=10,
+               train_size=None, test_size=0.1, save_local=False, push_to_hub=True, 
+               seed=42, output_dir=None, verbose=False):
     ## Set seed
     set_seed(seed)
 
@@ -26,12 +29,12 @@ def preprocess(dataset=None, split=None, tokenizer=None, revision="main", shard_
 
     ## Create bag of sentences
     def get_bag(batch):
-       bag = [sentence.strip() 
-              for article in batch["text"] 
-              for paragraph in article.split("\n") 
-              for sentence in paragraph.split(".")    
-              if sentence.strip() != "" and paragraph.count(".") > 0]
-       return {"bag":bag}
+        bag = [sentence.strip() 
+               for article in batch["text"] 
+               for paragraph in article.split("\n") 
+               for sentence in paragraph.split(".")    
+               if sentence.strip() != "" and paragraph.count(".") > 0]
+        return {"bag":bag}
 
     bag = data.map(
         get_bag, 
@@ -64,29 +67,27 @@ def preprocess(dataset=None, split=None, tokenizer=None, revision="main", shard_
         inputs = tokenizer(sentence1, sentence2, return_tensors="pt", max_length=512, 
                            truncation=True, padding="max_length")
         inputs["next_sentence_label"] = torch.LongTensor(labels)
-        inputs["labels"] = inputs.input_ids.detach().clone()
         return inputs
 
-    def sharded_preprocess(dataset, shard_size=100_000):
-        num_shards = math.ceil(len(dataset["train"]) / shard_size)
+    def sharded_preprocess(dataset, num_shards=num_shards):
         shards = []
         for i in range(num_shards):
-            if i == num_shards-1:
-                data_shard = dataset["train"]
-            else:
-                dataset = dataset["train"].train_test_split(test_size=min(shard_size, len(dataset["train"])), shuffle=False)
-                data_shard = dataset["test"]
+            data_shard = dataset.shard(num_shards, i)
             shards.append(data_shard.map(
                 preprocess, 
                 batched=True, 
                 remove_columns=['id', 'url', 'title', 'text'], 
-                desc=f"Preprocess shard {i+1} of the dataset for NSP"
+                desc=f"Preprocess shard {i+1}/{num_shards} of the dataset for NSP"
             ))
         return concatenate_datasets(shards, split="train")
+    
+    ## Shuffle the data
+    if verbose: print("Shuffle the data...")
+    data = data.shuffle(seed=seed)
 
     ## Preprocess the data
     if verbose: print("Preprocess the data...")
-    processed_data = sharded_preprocess(data, shard_size=shard_size)
+    processed_data = sharded_preprocess(data["train"], num_shards=num_shards)
 
     ## Split into train/test sets
     if verbose: print("Split data into train and test sets")
@@ -95,7 +96,8 @@ def preprocess(dataset=None, split=None, tokenizer=None, revision="main", shard_
     ## Save dataset to disk
     if output_dir is None:
         output_dir = f"{dataset}-pretrain-processed"
-    input_data.save_to_disk(output_dir)
+    if save_local: input_data.save_to_disk("data/" + output_dir)
+    if push_to_hub: input_data.push_to_hub(get_full_repo_name(output_dir))
 
 
 if __name__ == "__main__":
@@ -125,10 +127,10 @@ if __name__ == "__main__":
         default="main"
     )
     parser.add_argument(
-        '--shard_size',
-        help=("The size of shard to use in data preprocessing. Larger sizes run faster, smaller sizes cache more often. Default is 100_000."),
+        '--num_shards',
+        help=("The number of shards to use in data preprocessing. Less shards runs faster, More shards caches more often. Default is 10."),
         type=int,
-        default=100_000
+        default=10
     )
     parser.add_argument(
         '--train_size',
@@ -143,10 +145,25 @@ if __name__ == "__main__":
         default=0.15
     )
     parser.add_argument(
+        '--save_local',
+        '-s',
+        help=("Indicates that the preprocessed data should be saved locally. Default is False."),
+        default=False,
+        action="store_true"
+    )
+    parser.add_argument(
+        '--no_push_to_hub',
+        '-n',
+        help=("Indicates that the preprocessed data should not be pushed to the HuggingFace Hub. Default is to push to the Hub."),
+        default=True,
+        dest="push_to_hub",
+        action="store_false"
+    )
+    parser.add_argument(
         '--seed',
         help=("The seed to use for randomness in preprocessing. Default is 42."),
         type=int,
-        default=None
+        default=42
     )
     parser.add_argument(
         '--output_dir',
