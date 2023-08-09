@@ -29,7 +29,7 @@ def pretrain(model=None, dataset=None, split="train", tokenizer=None, revision="
 
     ## Add labels column to the data if it doesn't exist
     if "labels" not in preprocessed.column_names:
-        preprocessed["labels"] = preprocessed.input_ids.detach().clone()
+        preprocessed = preprocessed.map(lambda batch: {"labels":batch["input_ids"].copy()}, batched=True)
 
     ## Create a train and validation split of the preprocessed data
     if train_size is None and validation_size is None: train_size = 0.9

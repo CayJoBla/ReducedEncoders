@@ -2,7 +2,7 @@ WANDB_PROJECT="bert-base-uncased-reduced-mlm" \
 python pretrain_bert.py \
     --model cayjobla/bert-base-uncased-reduced \
     --revision pretrain \
-    --dataset "cayjobla/wikipedia-simple-pretrain-processed" \
+    --dataset "cayjobla/wikipedia-pretrain-processed" \
     --split "train" \
     --train_size 0.9 \
     --validation_size 0.1 \
