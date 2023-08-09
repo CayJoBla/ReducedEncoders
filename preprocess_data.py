@@ -4,10 +4,8 @@ from transformers import set_seed, AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
 from huggingface_hub import get_full_repo_name
 import random
-import math
 import argparse
 import torch
-import time
 
 def preprocess(dataset=None, split=None, tokenizer=None, revision="main", num_shards=10,
                train_size=None, test_size=0.1, save_local=False, push_to_hub=True, 

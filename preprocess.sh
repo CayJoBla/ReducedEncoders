@@ -6,5 +6,5 @@ python preprocess_data.py \
     --num_shards 30 \
     --train_size 0.9 \
     --test_size 0.1 \
-    --output_dir "data/wikipedia-pretrain-processed" \
+    --output_dir "wikipedia-pretrain-processed" \
     -v 
