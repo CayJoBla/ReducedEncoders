@@ -8,7 +8,7 @@ import argparse
 def pretrain(model=None, dataset=None, split="train", tokenizer=None, revision="main", train_size=None, 
              validation_size=None, mlm_probability=0.15, batch_size=16, output_dir=None, eval_strategy="steps", 
              eval_steps=50000, save_strategy="steps", save_steps=50000, learning_rate=2e-4, num_epochs=1, 
-             logging_steps=50, push_to_hub=False, run_name=None, seed=42, verbose=False):
+             logging_steps=50, push_to_hub=False, run_name=None, seed=42, verbose=False, checkpoint=None):
     ## Set seed
     set_seed(seed)
 
@@ -68,7 +68,8 @@ def pretrain(model=None, dataset=None, split="train", tokenizer=None, revision="
     )
 
     ## Train the model
-    trainer.train()
+    if checkpoint == "latest": checkpoint = True
+    trainer.train(resume_from_checkpoint=checkpoint)
 
     ## Save the model
     trainer.save_model(output_dir=output_dir)
@@ -203,6 +204,12 @@ if __name__ == "__main__":
         default=False,
         action="store_true"
     )    
+    parser.add_argument(
+        '--checkpoint',
+        help=("The checkpoint to resume training from. Default is None."),
+        type=str,
+        default=None
+    )
 
     kwargs = parser.parse_args()
     pretrain(**vars(kwargs))
