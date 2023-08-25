@@ -8,7 +8,7 @@ import argparse
 def pretrain(model=None, dataset=None, split="train", tokenizer=None, revision="main", train_size=None, 
              validation_size=None, mlm_probability=0.15, batch_size=16, output_dir=None, eval_strategy="steps", 
              eval_steps=50000, save_strategy="steps", save_steps=50000, learning_rate=2e-4, num_epochs=1, 
-             logging_steps=50, push_to_hub=False, run_name=None, seed=42, verbose=False, checkpoint=None):
+             logging_steps=50, push_to_hub=False, run_name=None, seed=916, verbose=False, checkpoint=None):
     ## Set seed
     set_seed(seed)
 
@@ -38,6 +38,10 @@ def pretrain(model=None, dataset=None, split="train", tokenizer=None, revision="
 
     ## Create data collator
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm_probability=mlm_probability)
+
+    ## Freze base model parameters
+    for param in model.base_model.parameters():
+        param.requires_grad = False
 
     ## Define training arguments
     if output_dir is None: output_dir = model_name.split("/")[-1]

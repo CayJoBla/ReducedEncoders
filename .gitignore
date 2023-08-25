@@ -5,3 +5,4 @@ bert-base-uncased*/
 __pycache__/
 test*
 data/
+nohup.out
