@@ -1,0 +1,5 @@
+from .BertReduce import BertReduce
+from .BertReducedForPreTraining import BertReducedForPreTraining
+from .BertReducedForSequenceClassification import BertReducedForSequenceClassification
+from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
+from .BertReductionLayer import BertReductionLayer
