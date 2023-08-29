@@ -1,6 +1,6 @@
 .venv/
 wandb/
-bert-base-uncased*/
+bert-base-uncased-reduced/
 .ipynb_checkpoints/
 __pycache__/
 test*
