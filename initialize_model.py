@@ -1,6 +1,5 @@
 # initialize_model.py
 
-import sys
 import argparse
 
 from transformers import AutoTokenizer, BertTokenizer, BertConfig

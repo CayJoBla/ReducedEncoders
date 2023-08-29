@@ -254,6 +254,10 @@ def train(model=None, dataset=None, num_shards=None, index=0, train_size=None, t
 
 
 if __name__ == "__main__":
+
+    DeprecationWarning("This script is deprecated. Use pretrain_bert.py instead.")
+    exit()
+
     parser = argparse.ArgumentParser(description="Train a reduced BERT model for masked language modeling")
     parser.add_argument(
         '--model',
