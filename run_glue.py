@@ -367,7 +367,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    model = BertReducedForSequenceClassification.from_pretrained(
+    model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
@@ -505,6 +505,9 @@ def main():
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
     else:
         data_collator = None
+
+    # Don't need to freeze model weights, I think.
+    # Evaluation is on how well the model fine-tunes to tasks, including base model weights.
 
     # Initialize our Trainer
     trainer = Trainer(
