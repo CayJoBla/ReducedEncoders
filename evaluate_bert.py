@@ -1,0 +1,243 @@
+# pretrain_bert.py
+
+from transformers import set_seed, AutoTokenizer, TrainingArguments, Trainer, default_data_collator
+from bert_reduced import BertReducedForSequenceClassification
+from datasets import load_dataset
+import evaluate
+import numpy as np
+import argparse
+from torch.optim import AdamW
+
+task_to_keys = {
+    "cola": ("sentence", None),
+    "mnli": ("premise", "hypothesis"),
+    "mrpc": ("sentence1", "sentence2"),
+    "qnli": ("question", "sentence"),
+    "qqp": ("question1", "question2"),
+    "rte": ("sentence1", "sentence2"),
+    "sst2": ("sentence", None),
+    "stsb": ("sentence1", "sentence2"),
+    "wnli": ("sentence1", "sentence2"),
+}
+
+def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="main", output_dir=None, 
+               batch_size=16, learning_rate=5e-5, num_epochs=3, logging_steps=50, run_name=None, seed=916, 
+               verbose=False):
+    ## Set seed
+    set_seed(seed)
+
+    ## Load model
+    model_name = "cayjobla/bert-base-uncased-reduced" if model is None else model
+    if verbose: print(f"Loading {model_name} model...")
+    model = BertReducedForSequenceClassification.from_pretrained(model_name, revision=revision)
+
+    ## Load tokenizer
+    if tokenizer is None: tokenizer = model_name
+    if verbose: print(f"Loading {tokenizer} tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision)
+
+    ## Load preprocessed data
+    if verbose: print(f"Loading the '{task}' split of the '{dataset}' dataset...")
+    data = load_dataset(dataset, task)
+
+    ## Define training arguments
+    if verbose: print(f"Defining training arguments...")
+    if output_dir is None: output_dir = model_name.split("/")[-1]
+    if run_name is None: run_name = "mlm-nsp-" + dataset
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        overwrite_output_dir=True,
+        evaluation_strategy="epoch",
+        learning_rate=learning_rate,
+        num_train_epochs=num_epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        save_strategy="no",
+        push_to_hub=False,
+        logging_steps=logging_steps,
+        run_name=run_name
+    )
+
+    ## Preprocess data
+    if verbose: print(f"Preprocessing the dataset for the '{task}' task...")
+    is_regression = task == "stsb"
+    sentence1_key, sentence2_key = task_to_keys[task]
+    padding = "max_length"
+
+    def preprocess_function(examples):
+        # Tokenize the texts
+        args = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        )
+        result = tokenizer(*args, padding=padding, max_length=128, truncation=True)   
+        return result
+
+    with training_args.main_process_first(desc="dataset map pre-processing"):
+        data = data.map(
+            preprocess_function,
+            batched=True,
+            desc="Running tokenizer on dataset",
+        )
+
+    # Define datasets
+    train_dataset = data["train"]
+    eval_dataset = data["validation_matched" if task == "mnli" else "validation"]
+
+    ## Load evaluation metric
+    if verbose: print(f"Load the evaluation metric for the '{task}' task...")
+    metric = evaluate.load("glue", task)
+
+    def compute_metrics(p):
+        preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+        preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
+        result = metric.compute(predictions=preds, references=p.label_ids)
+        if len(result) > 1:
+            result["combined_score"] = np.mean(list(result.values())).item()
+        return result
+
+    ## Create data collator
+    data_collator = default_data_collator
+
+    # Freezing of base model parameters is not needed as in pretraining for the reduction head
+    # Evaluation is on whether fine-tuning works well on the model
+
+    if verbose: print(f"Initialize Trainer...")
+
+    # Initialize our Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        compute_metrics=compute_metrics
+    )
+
+    ## Train the model
+    if verbose: print(f"Train the model...")
+    trainer.evaluate()
+    train_result = trainer.train()
+
+    ## Save the model
+    if verbose: print(f"Save the model...")
+    metrics = train_result.metrics
+    trainer.save_model(output_dir=output_dir)
+
+    trainer.log_metrics("train", metrics)
+    trainer.save_metrics("train", metrics)
+    trainer.save_state()
+
+    # Evaluation
+    if verbose: print(f"Evaluate the model on the validation set...")
+    # Loop to handle MNLI double evaluation (matched, mis-matched)
+    tasks = [task]
+    eval_datasets = [eval_dataset]
+    if task == "mnli":
+        tasks.append("mnli-mm")
+        eval_datasets.append(data["validation_mismatched"])
+        combined = {}
+
+    for eval_dataset, task in zip(eval_datasets, tasks):
+        metrics = trainer.evaluate(eval_dataset=eval_dataset)
+        metrics["eval_samples"] = len(eval_dataset)
+
+        if task == "mnli-mm":
+            metrics = {k + "_mm": v for k, v in metrics.items()}
+        if task is not None and "mnli" in task:
+            combined.update(metrics)
+
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
+
+    kwargs = {"finetuned_from": model_name, "tasks": "text-classification"}
+    kwargs["language"] = "en"
+    kwargs["dataset_tags"] = "glue"
+    kwargs["dataset_args"] = task
+    kwargs["dataset"] = f"GLUE {task.upper()}"
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train the provided model on the given preprocessed dataset for MLM and NSP.")
+    parser.add_argument(
+        '--model',
+        help=("The model to pretrain. Default is 'cayjobla/bert-base-uncased-reduced'."),
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--revision',
+        help=("The revision of the model to use. Default is 'main'"),
+        type=str,
+        default="main"
+    )
+    parser.add_argument(
+        '--dataset',
+        help=("The dataset to train the model on. Defaults to the glue dataset."),
+        type=str,
+        default="glue"
+    )
+    parser.add_argument(
+        '--task',
+        help=("The glue task to train/evaluate on. Required for training."),
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--tokenizer',
+        help=("The tokenizer to use during training. Default is to use the model's tokenizer."),
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--batch_size',
+        help=("The batch size to use during training. Default is 16."),
+        type=int,
+        default=16
+    )
+    parser.add_argument(
+        '--learning_rate',
+        help=("The learning rate to use during training. Default is 2e-4."),
+        type=float,
+        default=2e-4
+    )
+    parser.add_argument(
+        '--num_epochs',
+        help=("The number of epochs to train for. Default is 1."),
+        type=int,
+        default=1
+    )
+    parser.add_argument(
+        '--logging_steps',
+        help=("The number of steps between logging during training. Default is 50."),
+        type=int,
+        default=50
+    )
+    parser.add_argument(
+        '--output_dir',
+        help=("The output directory to save the trained model to. If None, the model name is used."),
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--run_name',
+        help=("The name of the WandB run. Default is 'mlm-nsp-{dataset}'."),
+        type=str,
+        default=None
+    )
+    parser.add_argument(
+        '--seed',
+        help=("The seed to use for randomness in preprocessing. Default is 42."),
+        type=int,
+        default=42
+    )
+    parser.add_argument(
+        '--verbose',
+        '-v',
+        help=("Whether to print preprocessing progress information. Default is False."),
+        default=False,
+        action="store_true"
+    )  
+
+    kwargs = parser.parse_args()
+    evaluation(**vars(kwargs))
