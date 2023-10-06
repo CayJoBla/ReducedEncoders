@@ -1,6 +1,6 @@
-# pretrain_bert.py
+# evaluate_bert.py
 
-from transformers import set_seed, AutoTokenizer, TrainingArguments, Trainer, default_data_collator
+from transformers import set_seed, AutoConfig, AutoTokenizer, TrainingArguments, Trainer, default_data_collator, TrainerCallback
 from bert_reduced import BertReducedForSequenceClassification
 from datasets import load_dataset
 import evaluate
@@ -26,19 +26,32 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     ## Set seed
     set_seed(seed)
 
-    ## Load model
+    ## Load preprocessed data
+    if verbose: print(f"Loading the '{task}' split of the '{dataset}' dataset...")
+    data = load_dataset(dataset, task)
+
+    # Get number of classification labels
+    is_regression = task == "stsb"
+    if not is_regression:
+        label_list = data["train"].features["label"].names
+        num_labels = len(label_list)
+    else:
+        num_labels = 1
+
+    ## Load 
     model_name = "cayjobla/bert-base-uncased-reduced" if model is None else model
-    if verbose: print(f"Loading {model_name} model...")
-    model = BertReducedForSequenceClassification.from_pretrained(model_name, revision=revision)
+    config = AutoConfig.from_pretrained(model_name, revision=revision, num_labels=num_labels)
 
     ## Load tokenizer
     if tokenizer is None: tokenizer = model_name
     if verbose: print(f"Loading {tokenizer} tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision)
 
-    ## Load preprocessed data
-    if verbose: print(f"Loading the '{task}' split of the '{dataset}' dataset...")
-    data = load_dataset(dataset, task)
+    ## Load model
+    if verbose: print(f"Loading {model_name} model...")
+    model = BertReducedForSequenceClassification.from_pretrained(
+        model_name, revision=revision, config=config, ignore_mismatched_sizes=True
+    )
 
     ## Define training arguments
     if verbose: print(f"Defining training arguments...")
@@ -60,7 +73,6 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
 
     ## Preprocess data
     if verbose: print(f"Preprocessing the dataset for the '{task}' task...")
-    is_regression = task == "stsb"
     sentence1_key, sentence2_key = task_to_keys[task]
     padding = "max_length"
 
@@ -114,9 +126,16 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
         compute_metrics=compute_metrics
     )
 
+    ## Add evaluation for 0th epoch
+    class EvaluateFirstStepCallback(TrainerCallback):
+        def on_step_begin(self, args, state, control, **kwargs):
+            if state.global_step == 0:
+                control.should_evaluate = True
+
+    trainer.add_callback(EvaluateFirstStepCallback())
+
     ## Train the model
     if verbose: print(f"Train the model...")
-    trainer.evaluate()
     train_result = trainer.train()
 
     ## Save the model
