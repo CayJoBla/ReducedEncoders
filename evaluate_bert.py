@@ -6,7 +6,7 @@ from datasets import load_dataset
 import evaluate
 import numpy as np
 import argparse
-from torch.optim import AdamW
+import os
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -22,7 +22,7 @@ task_to_keys = {
 
 def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="main", output_dir=None, 
                batch_size=16, learning_rate=5e-5, num_epochs=3, logging_steps=50, run_name=None, seed=916, 
-               verbose=False):
+               verbose=False, do_predict=True):
     ## Set seed
     set_seed(seed)
 
@@ -169,6 +169,34 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
 
+    if do_predict:
+        print("Predict the test set labels...")
+        # Loop to handle MNLI double evaluation (matched, mis-matched)
+        tasks = [task]
+        predict_dataset = data["test_matched" if task == "mnli" else "test"]
+        predict_datasets = [predict_dataset]
+        if task == "mnli":
+            tasks.append("mnli-mm")
+            predict_datasets.append(data["test_mismatched"])
+
+        for predict_dataset, task in zip(predict_datasets, tasks):
+            # Removing the `label` columns because it contains -1 and Trainer won't like that.
+            predict_dataset = predict_dataset.remove_columns("label")
+            predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
+            predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
+
+            output_predict_file = os.path.join(output_dir, f"predict_results_{task}.txt")
+            if trainer.is_world_process_zero():
+                print("inside")
+                with open(output_predict_file, "w") as writer:
+                    writer.write("index\tprediction\n")
+                    for index, item in enumerate(predictions):
+                        if is_regression:
+                            writer.write(f"{index}\t{item:3.3f}\n")
+                        else:
+                            item = label_list[item]
+                            writer.write(f"{index}\t{item}\n")
+
     kwargs = {"finetuned_from": model_name, "tasks": "text-classification"}
     kwargs["language"] = "en"
     kwargs["dataset_tags"] = "glue"
@@ -257,6 +285,12 @@ if __name__ == "__main__":
         default=False,
         action="store_true"
     )  
+    parser.add_argument(
+        '--do_predict',
+        help=("Whether to predict on the test set after training. Default is True."),
+        default=True,
+        action="store_true"
+    )
 
     kwargs = parser.parse_args()
     evaluation(**vars(kwargs))
