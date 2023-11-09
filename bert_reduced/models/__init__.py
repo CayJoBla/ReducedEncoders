@@ -3,3 +3,5 @@ from .BertReducedForPreTraining import BertReducedForPreTraining
 from .BertReducedForSequenceClassification import BertReducedForSequenceClassification
 from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
 from .BertReductionLayer import BertReductionLayer
+from .SBertPooler import SBertPooler
+from .SBertReducedModel import SBertReducedModel
