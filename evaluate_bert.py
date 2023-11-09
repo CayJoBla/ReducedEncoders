@@ -20,18 +20,21 @@ task_to_keys = {
     "wnli": ("sentence1", "sentence2"),
 }
 
-def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="main", output_dir=None, 
-               batch_size=16, learning_rate=5e-5, num_epochs=3, logging_steps=50, run_name=None, seed=916, 
+def evaluation(model=None, dataset="glue", task_name=None, tokenizer=None, revision="main", output_dir=None, 
+               batch_size=16, learning_rate=5e-5, num_epochs=3, logging_steps=50, run_name=None, seed=42, 
                verbose=False, do_predict=True):
     ## Set seed
     set_seed(seed)
 
     ## Load preprocessed data
-    if verbose: print(f"Loading the '{task}' split of the '{dataset}' dataset...")
-    data = load_dataset(dataset, task)
+    if verbose: print(f"Loading the '{task_name}' split of the '{dataset}' dataset...")
+    data = load_dataset(dataset, task_name)
+
+    if task_name == "mnli" and do_predict is True:
+        data["ax"] = load_dataset("glue", "ax")["test"]
 
     # Get number of classification labels
-    is_regression = task == "stsb"
+    is_regression = task_name == "stsb"
     if not is_regression:
         label_list = data["train"].features["label"].names
         num_labels = len(label_list)
@@ -56,7 +59,7 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     ## Define training arguments
     if verbose: print(f"Defining training arguments...")
     if output_dir is None: output_dir = model_name.split("/")[-1]
-    if run_name is None: run_name = "mlm-nsp-" + dataset
+    if run_name is None: run_name = "eval-" + dataset
     training_args = TrainingArguments(
         output_dir=output_dir,
         overwrite_output_dir=True,
@@ -72,8 +75,8 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     )
 
     ## Preprocess data
-    if verbose: print(f"Preprocessing the dataset for the '{task}' task...")
-    sentence1_key, sentence2_key = task_to_keys[task]
+    if verbose: print(f"Preprocessing the dataset for the '{task_name}' task...")
+    sentence1_key, sentence2_key = task_to_keys[task_name]
     padding = "max_length"
 
     def preprocess_function(examples):
@@ -93,11 +96,11 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
 
     # Define datasets
     train_dataset = data["train"]
-    eval_dataset = data["validation_matched" if task == "mnli" else "validation"]
+    eval_dataset = data["validation_matched" if task_name == "mnli" else "validation"]
 
     ## Load evaluation metric
-    if verbose: print(f"Load the evaluation metric for the '{task}' task...")
-    metric = evaluate.load("glue", task)
+    if verbose: print(f"Load the evaluation metric for the '{task_name}' task...")
+    metric = evaluate.load("glue", task_name)
 
     def compute_metrics(p):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
@@ -113,9 +116,8 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     # Freezing of base model parameters is not needed as in pretraining for the reduction head
     # Evaluation is on whether fine-tuning works well on the model
 
-    if verbose: print(f"Initialize Trainer...")
-
     # Initialize our Trainer
+    if verbose: print(f"Initialize Trainer...")
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -150,9 +152,9 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     # Evaluation
     if verbose: print(f"Evaluate the model on the validation set...")
     # Loop to handle MNLI double evaluation (matched, mis-matched)
-    tasks = [task]
+    tasks = [task_name]
     eval_datasets = [eval_dataset]
-    if task == "mnli":
+    if task_name == "mnli":
         tasks.append("mnli-mm")
         eval_datasets.append(data["validation_mismatched"])
         combined = {}
@@ -167,17 +169,21 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
             combined.update(metrics)
 
         trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
+        trainer.save_metrics("eval", combined if "mnli" in task else metrics)
 
     if do_predict:
         print("Predict the test set labels...")
         # Loop to handle MNLI double evaluation (matched, mis-matched)
-        tasks = [task]
-        predict_dataset = data["test_matched" if task == "mnli" else "test"]
+        tasks = [task_name]
+        predict_dataset = data["test_matched" if task_name == "mnli" else "test"]
         predict_datasets = [predict_dataset]
-        if task == "mnli":
+        if task_name == "mnli":
             tasks.append("mnli-mm")
             predict_datasets.append(data["test_mismatched"])
+
+            # Also add AX task
+            tasks.append("ax")
+            predict_datasets.append(data["ax"])
 
         for predict_dataset, task in zip(predict_datasets, tasks):
             # Removing the `label` columns because it contains -1 and Trainer won't like that.
@@ -187,7 +193,6 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
 
             output_predict_file = os.path.join(output_dir, f"predict_results_{task}.txt")
             if trainer.is_world_process_zero():
-                print("inside")
                 with open(output_predict_file, "w") as writer:
                     writer.write("index\tprediction\n")
                     for index, item in enumerate(predictions):
@@ -200,8 +205,8 @@ def evaluation(model=None, dataset="glue", task=None, tokenizer=None, revision="
     kwargs = {"finetuned_from": model_name, "tasks": "text-classification"}
     kwargs["language"] = "en"
     kwargs["dataset_tags"] = "glue"
-    kwargs["dataset_args"] = task
-    kwargs["dataset"] = f"GLUE {task.upper()}"
+    kwargs["dataset_args"] = task_name
+    kwargs["dataset"] = f"GLUE {task_name.upper()}"
 
 
 if __name__ == "__main__":
@@ -227,6 +232,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--task',
         help=("The glue task to train/evaluate on. Required for training."),
+        dest="task_name",
         type=str,
         default=None
     )
