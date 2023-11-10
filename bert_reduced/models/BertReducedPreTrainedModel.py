@@ -6,7 +6,7 @@ import warnings
 class BertReducedPreTrainedModel(BertPreTrainedModel):
     """An abstract class for defining common methods between reduced BERT models."""
     
-    def _initialize_config(self, config, reduction_sizes=None, reduced_size=None):
+    def _initialize_config(self, config, reduction_sizes=None):
         """Ensure reduction_sizes and reduced_size configuration parameters are consistent, and set default values 
         if they are not specified. Assign the config to the model.
 
@@ -15,32 +15,21 @@ class BertReducedPreTrainedModel(BertPreTrainedModel):
                 parameters are prioritized over the defaults
             reduction_sizes (tuple): A sequence of reduction layer sizes. This is meant
                 to be a default set by the model. 
-            reduced_size (int): The final dimensionality of the reduced hidden states.
-                This is meant to be a default set by the model. Should be the same as 
-                the last element of reduction_sizes.
         """
         # Prioritize the values in the config
         if isinstance(config, PretrainedConfig):
-            config_dict = config.__dict__
-            reduction_sizes = config_dict["reduction_sizes"] if "reduction_sizes" in config_dict else reduction_sizes
-            reduced_size = config_dict["reduced_size"] if "reduced_size" in config_dict else reduced_size
+            reduction_sizes = config.__dict__.get("reduction_sizes", reduction_sizes)
         elif config is None:
             config = BertConfig()
         else:
             raise ValueError("`config` must be a PretrainedConfig object.")
 
         # Set default values if necessary
-        if reduced_size is None:
-            reduced_size = reduction_sizes[-1] if reduction_sizes else 48
         if reduction_sizes is None:
-            reduction_sizes = (reduced_size,)
-
-        # Check that the values are consistent
-        if reduced_size != reduction_sizes[-1]:
-            raise ValueError("The `reduced_size` parameter must match the last element of `reduction_sizes`.")
+            reduction_sizes = (48,)
             
         config.reduction_sizes = reduction_sizes
-        config.reduced_size = reduced_size
+        config.reduced_size = reduction_sizes[-1]
         self.config = config
 
 
