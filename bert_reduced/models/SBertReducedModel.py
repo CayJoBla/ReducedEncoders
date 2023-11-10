@@ -35,7 +35,7 @@ class SBertReducedModel(BertReducedPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        embeddings = self.pooler(sequence_output)           # TODO: Should the pooling and reduction be done in the other order?
-        reduced_embeddings = self.reduce(pooled_output)     #       May learn more the other way...
+        embeddings = self.pooler(sequence_output, attention_mask)   # TODO: Should the pooling and reduction be done in the other order?
+        reduced_embeddings = self.reduce(pooled_output)             #       May learn more the other way...
 
         return (reduced_embeddings, embeddings) + outputs[2:]
