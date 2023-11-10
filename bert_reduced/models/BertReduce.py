@@ -13,33 +13,32 @@ class BertReduce(nn.Sequential):
 
     Args:
         config (BertConfig): Configuration for the BERT model. Should also include the 
-            reduced_size parameter for the final size of the output of this module.
+            reduction_sizes parameter for the sizes of each reduction layer of this module.
         inter_sizes (tuple): A sequence of intermediate layer sizes to reduce the
             dimensionality over multiple linear layers.
     """
-    def __init__(self, config, inter_sizes=(), modules=None):
+    def __init__(self, config, modules=None):
         input_size = config.hidden_size
-        output_size = config.reduced_size
+        reduction_sizes = config.reduction_sizes
         
         if modules is None:
             modules = OrderedDict()
-            i = -1              # In the case that inter_sizes is empty
-            for i, inter_size in enumerate(inter_sizes):   
-                modules[str(i)] = BertReductionLayer(input_size, inter_size, config)
-                input_size = inter_size
-            modules[str(i+1)] = BertReductionLayer(input_size, output_size, config)
+            for i, reduction_size in enumerate(reduction_sizes):   
+                modules[str(i)] = BertReductionLayer(input_size, reduction_size, config)
+                input_size = reduction_size
         elif not isinstance(modules, OrderedDict):
             modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
     
         super().__init__(modules)
 
 
-class BertReduceLoadWrapper(BertPreTrainedModel):
-    def __init__(self, config, inter_sizes=(), modules=None):
+class BertReduceLoader(BertPreTrainedModel):
+    def __init__(self, config):
         super().__init__(config)
-        self.reduce = BertReduce(config, inter_sizes=inter_sizes, modules=modules)
-    
-    def forward(self, *args, **kwargs):
-        self.reduce(*args, **kwargs)
+        self.reduce = BertReduce(config, modules=None)
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        return super().from_pretrained(*args, **kwargs)
 
         
