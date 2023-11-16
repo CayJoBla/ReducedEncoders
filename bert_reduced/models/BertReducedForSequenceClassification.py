@@ -6,7 +6,7 @@ from transformers.modeling_outputs import SequenceClassifierOutput
 from transformers import BertModel
 
 from .DimReduce import DimReduce
-from .NewBertReducedPreTrainedModel import BertReducedPreTrainedModel
+from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
 
 class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
     """

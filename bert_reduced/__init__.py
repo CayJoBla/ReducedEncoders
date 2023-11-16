@@ -1,8 +1,8 @@
 from .models import (
-    BertReduce, 
+    DimReduce, 
     BertReducedForPreTraining, 
     BertReducedForSequenceClassification, 
     BertReducedPreTrainedModel, 
-    BertReductionLayer, 
-    SBertReducedModel
+    DimReduceLayer, 
+    SBertMPNetReducedModel
     )

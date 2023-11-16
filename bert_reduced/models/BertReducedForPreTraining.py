@@ -5,7 +5,7 @@ from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
 from transformers import BertModel
 
 from .DimReduce import DimReduce
-from .NewBertReducedPreTrainedModel import BertReducedPreTrainedModel
+from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
 from .ModelHeads import BertReducedPreTrainingHeads
 
 class BertReducedForPreTraining(BertReducedPreTrainedModel):
