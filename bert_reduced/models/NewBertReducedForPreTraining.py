@@ -2,31 +2,31 @@
 
 from torch import nn
 from transformers.models.bert.modeling_bert import BertForPreTrainingOutput
+from transformers import BertModel
 
-from .BertReduce import BertReduce
-from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
+from .DimReduce import DimReduce
+from .NewBertReducedPreTrainedModel import BertReducedPreTrainedModel
 from .ModelHeads import BertReducedPreTrainingHeads
 
 class BertReducedForPreTraining(BertReducedPreTrainedModel):
     """
-    An abstract class for defining common methods between reduced BERT models.
+    A BERT model used during pretraining. Has both an MLM and NSP head.
     
     Args:
-        config (BertConfig): Configuration for the BERT model. Should also include the 
-            reduced_size parameter. If not, reduced_size defaults to 48. If config=None,
-            the config of _from_pretrained_base or the default BertConfig is used.
-        inter_sizes (tuple): A sequence of intermediate layer sizes as defined in BertReduce
-        _from_pretrained_base (str): A model name or path to a locally saved model to use as
-            the base BERT model for the full reduced model. Does not load the model head.
+        config (BertConfig): Configuration for the reduced BERT model. 
+        base_model: The base BERT model to use. If not specified, a new BERT model will be
+            initialized using the config.
+        reduce_module: The dimensionality reduction module to use. If not specified, a new
+            module will be initialized using the config.
     """
-    def __init__(self, config=None, inter_sizes=(512,256,128,64), _from_pretrained_base=None, **kwargs):
-        self._initialize_config(config, _from_pretrained_base=_from_pretrained_base)
+    def __init__(self, config=None, base_model=None, reduce_module=None):
+        self._initialize_config(config)
         super().__init__(self.config)
-        
-        self._load_base_model(_from_pretrained_base, **kwargs)
-        self.reduce = BertReduce(self.config, inter_sizes=inter_sizes)
+
+        self.bert = base_model if base_model is not None else BertModel(self.config)
+        self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
         self.cls = BertReducedPreTrainingHeads(self.config)
-        
+
         self.post_init()
     
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 

@@ -2,35 +2,40 @@
 
 import torch
 from torch import nn
-
 from transformers.modeling_outputs import SequenceClassifierOutput
+from transformers import BertModel
 
-from .BertReduce import BertReduce
-from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
+from .DimReduce import DimReduce
+from .NewBertReducedPreTrainedModel import BertReducedPreTrainedModel
 
 class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
     """
     The reduced BERT model for sequence classification.
-    """ 
-    def __init__(self, config=None, inter_sizes=(512,256,128,64), _from_pretrained_base=None, **kwargs):
-        self._initialize_config(config, _from_pretrained_base=_from_pretrained_base)
+
+    Args:
+        config (BertConfig): Configuration for the reduced BERT model. 
+        base_model: The base BERT model to use. If not specified, a new BERT model will be
+            initialized using the config.
+        reduce_module: The dimensionality reduction module to use. If not specified, a new
+            module will be initialized using the config.
+    """
+    def __init__(self, config=None, base_model=None, reduce_module=None):
+        self._initialize_config(config)
         super().__init__(self.config)
         
-        self._load_base_model(_from_pretrained_base, **kwargs)
-        self.reduce = BertReduce(self.config, inter_sizes=inter_sizes)
-
-        classifier_dropout = (
-            config.classifier_dropout if self.config.classifier_dropout is not None else self.config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self._load_head()
+        self.bert = base_model if base_model is not None else BertModel(self.config)
+        self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.dropout = nn.Dropout(self.config.classifier_dropout)
+        self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
         
         self.post_init()
 
-    def _load_head(self):
+    def _initialize_config(self, config=None, reduction_sizes=(48,)):
+        super()._initialize_config(config, reduction_sizes=reduction_sizes)
+        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
+            self.config.classifier_dropout = self.config.hidden_dropout_prob
         if not hasattr(self.config, 'num_labels'):
             self.config.num_labels = 2
-        self.classifier = nn.Linear(in_features=self.config.reduced_size, out_features=self.config.num_labels)
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 labels=None, output_attentions=None, output_hidden_states=None, return_dict=None):
