@@ -21,11 +21,11 @@ class DimReduce(nn.Sequential):
     """
     def __init__(self, config, modules=None):
         input_size = config.hidden_size
-        reduction_sizes = config.reduction_sizes
+        self.reduction_sizes = config.reduction_sizes
         
         if modules is None:
             modules = OrderedDict()
-            for i, reduction_size in enumerate(reduction_sizes):   
+            for i, reduction_size in enumerate(self.reduction_sizes):   
                 modules[str(i)] = DimReduceLayer(input_size, reduction_size, config)
                 input_size = reduction_size
         elif not isinstance(modules, OrderedDict):
