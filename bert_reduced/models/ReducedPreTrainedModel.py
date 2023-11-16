@@ -3,7 +3,7 @@
 from transformers import PreTrainedModel, AutoConfig, PretrainedConfig, AutoModel
 import warnings
 
-from .DimReduce import DimReduceLoader
+from .DimReduce import DimReduce, DimReduceLoader
 
 class ReducedPreTrainedModel(PreTrainedModel):
     """An abstract class for defining common methods between reduced models."""
@@ -32,13 +32,21 @@ class ReducedPreTrainedModel(PreTrainedModel):
         """Load the weights of a pretrained dimensionality reduction module into the reduced model."""
         self.reduce = DimReduceLoader.from_pretrained(reduction_model_name_or_path, *args, **kwargs)
 
+    @staticmethod
+    def _is_reduced_model(config):
+        """Determine whether a model is a reduced model from the config."""
+        return "reduction_sizes" in config.__dict__ or "reduced_size" in config.__dict__
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
                         base_model_class=None, **kwargs):
         # Load the config for the model
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        is_reduced_model = "reduction_sizes" in config.__dict__ or "reduced_size" in config.__dict__
-        config = kwargs.pop("config", config)
+        is_reduced_model = cls._is_reduced_model(config)
+
+        # Update config with provided parameters
+        if "config" in kwargs: 
+            config.__dict__ = config.__dict__.update(kwargs["config"].__dict__)
 
         # Load the model (different depending on whether this is a reduced model or not)
         if is_reduced_model:
@@ -56,7 +64,13 @@ class ReducedPreTrainedModel(PreTrainedModel):
             # Load the reduction module (if specified)
             if reduce_module is not None: 
                 if type(reduce_module) is not DimReduce:
-                    reduce_module = DimReduceLoader.from_pretrained(reduce_module, config=config)
+                    reduce_config = AutoConfig.from_pretrained(reduce_module, **kwargs)
+                    reduce_module = DimReduceLoader.from_pretrained(reduce_module, config=reduce_config)
+
+                # Currently, overrides the base model reduce configuration params from the structure of reduce_module
+                config.reduction_sizes = reduce_module.reduction_sizes
+                config.reduced_size = reduce_module.reduction_sizes[-1]
+
                 model = cls(config=config, base_model=base_model, reduce_module=reduce_module)
             else:
                 warnings.warn(f"The {cls.__name__} model is intended to have a dimensionality reduction "
