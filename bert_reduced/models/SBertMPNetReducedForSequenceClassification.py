@@ -30,7 +30,7 @@ class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
             self.config.num_labels = 2
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
-                inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
+                labels=None, inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.sbert(
@@ -87,6 +87,5 @@ class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
                         base_model_class=None, **kwargs):
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, 
-                                        reduce_module=reduce_module, base_model_class=base_model_class, 
-                                        **kwargs)
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, reduce_module=reduce_module, 
+                                        base_model_class=base_model_class, **kwargs)

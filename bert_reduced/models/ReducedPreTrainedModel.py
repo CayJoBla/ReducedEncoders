@@ -46,7 +46,7 @@ class ReducedPreTrainedModel(PreTrainedModel):
 
         # Update config with provided parameters
         if "config" in kwargs: 
-            config.__dict__ = config.__dict__.update(kwargs["config"].__dict__)
+            config.__dict__.update(kwargs.pop("config").__dict__)
 
         # Load the model (different depending on whether this is a reduced model or not)
         if is_reduced_model:
