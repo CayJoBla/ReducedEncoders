@@ -16,3 +16,8 @@
 ## BERT Reduced
 * Make the local BERT reduced model consistent with hub model
 * Fix the problems with the GLUE submission
+
+## Administrative
+* Look for where to publish the paper (not super big, not AAAI)
+* Look at starting the paper (reduction, topic modeling)
+* Look at topic modeling
