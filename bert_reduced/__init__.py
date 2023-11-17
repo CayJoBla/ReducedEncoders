@@ -4,5 +4,6 @@ from .models import (
     BertReducedForSequenceClassification, 
     BertReducedPreTrainedModel, 
     DimReduceLayer, 
-    SBertMPNetReducedModel
+    SBertMPNetReducedModel,
+    SBertMPNetReducedForSequenceClassification
     )

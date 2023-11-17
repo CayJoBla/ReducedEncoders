@@ -5,3 +5,4 @@ from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
 from .DimReduceLayer import DimReduceLayer
 from .SBertPooler import SBertPooler
 from .SBertMPNetReducedModel import SBertMPNetReducedModel
+from .SBertMPNetReducedForSequenceClassification import SBertMPNetReducedForSequenceClassification
