@@ -6,5 +6,9 @@ from .models import (
     BertReducedPreTrainedModel, 
     DimReduceLayer, 
     SBertMPNetReducedModel,
-    SBertMPNetReducedForSequenceClassification
+    SBertMPNetReducedForSequenceClassification,
+    AutoReducedModel,
+    AutoReducedModelForPreTraining,
+    AutoReducedModelForSequenceClassification,
+    ReducedPreTrainedModel,
     )

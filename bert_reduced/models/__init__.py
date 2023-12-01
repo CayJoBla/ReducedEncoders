@@ -7,3 +7,5 @@ from .DimReduceLayer import DimReduceLayer
 from .SBertPooler import SBertPooler
 from .SBertMPNetReducedModel import SBertMPNetReducedModel
 from .SBertMPNetReducedForSequenceClassification import SBertMPNetReducedForSequenceClassification
+from .AutoReducedModel import AutoReducedModel, AutoReducedModelForPreTraining, AutoReducedModelForSequenceClassification
+from .ReducedPreTrainedModel import ReducedPreTrainedModel
