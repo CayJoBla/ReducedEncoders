@@ -1,5 +1,6 @@
 from .models import (
     DimReduce, 
+    BertReducedModel,
     BertReducedForPreTraining, 
     BertReducedForSequenceClassification, 
     BertReducedPreTrainedModel, 

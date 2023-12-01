@@ -1,4 +1,5 @@
 from .DimReduce import DimReduce
+from .BertReducedModel import BertReducedModel
 from .BertReducedForPreTraining import BertReducedForPreTraining
 from .BertReducedForSequenceClassification import BertReducedForSequenceClassification
 from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
