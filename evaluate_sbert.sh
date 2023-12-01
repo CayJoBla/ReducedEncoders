@@ -4,8 +4,8 @@ export TASK_NAME=$1
 
 python evaluate_mpnet_sbert.py \
   --model cayjobla/all-mpnet-base-v2-reduced \
-  --tokenizer sentence-transformers/all-mpnet-base-v2 \
-  --revision main \
+  --tokenizer cayjobla/all-mpnet-base-v2-reduced \
+  --revision glue \
   --task $TASK_NAME \
   --batch_size 16 \
   --learning_rate 3e-5 \
