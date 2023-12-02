@@ -1,9 +1,11 @@
 # SBertMPNetReducedModel.py
 
+from transformers import MPNetModel
+from transformers.modeling_outputs import BaseModelOutputWithPooling
+
 from .MPNetReducedPreTrainedModel import MPNetReducedPreTrainedModel
 from .SBertPooler import SBertPooler
 from .DimReduce import DimReduce
-from transformers import MPNetModel
 
 class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
@@ -20,7 +22,8 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
             config.pooling_mode = pooling_mode
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
-                inputs_embeds=None, output_attentions=None, output_hidden_states=None):
+                inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.sbert(
             input_ids,
@@ -34,10 +37,18 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        embeddings = self.pooler(sequence_output, attention_mask)   
-        reduced_embeddings = self.reduce(embeddings) 
+        pooled_output= self.pooler(sequence_output, attention_mask)  
+        embeddings, pooled_embeddings = self.reduce(sequence_output), self.reduce(pooled_output) 
 
-        return (reduced_embeddings, embeddings) + outputs[2:]
+        if not return_dict:
+            return (embeddings, pooled_embeddings) + outputs[2:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=embeddings,
+            pooler_output=pooled_embeddings,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
