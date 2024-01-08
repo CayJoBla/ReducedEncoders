@@ -14,8 +14,8 @@ class ReducedModelOutput(ModelOutput):
 
         Other args from transformers.modeling_outputs.BaseModelOutput
     """
-    reduced_last_hidden_state: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
+    unreduced_last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -34,10 +34,10 @@ class ReducedModelOutputWithPooling(ModelOutput):
             
         Other args from transformers.modeling_outputs.BaseModelOutputWithPooling
     """
-    reduced_last_hidden_state: torch.FloatTensor = None
-    reduced_pooler_output: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
+    unreduced_last_hidden_state: torch.FloatTensor = None
+    unreduced_pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -55,9 +55,9 @@ class ReducedModelOutputWithPoolingAndCrossAttentions(ModelOutput):
             
         Other args from transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions
     """
-    reduced_last_hidden_state: torch.FloatTensor = None
-    reduced_pooler_output: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
+    unreduced_last_hidden_state: torch.FloatTensor = None
+    unreduced_pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None

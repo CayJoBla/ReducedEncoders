@@ -51,10 +51,10 @@ class BertReducedModel(BertReducedPreTrainedModel):
             return (reduced_seq, reduced_pooled) + outputs[2:]
 
         return ReducedModelOutputWithPoolingAndCrossAttentions(
-            reduced_last_hidden_state=reduced_seq,
-            reduced_pooler_output=reduced_pooled,
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
+            last_hidden_state=reduced_seq,
+            pooler_output=reduced_pooled,
+            unreduced_last_hidden_state=sequence_output,
+            unreduced_pooler_output=pooled_output,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
