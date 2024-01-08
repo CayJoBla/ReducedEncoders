@@ -37,15 +37,17 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        pooled_output= self.pooler(sequence_output, attention_mask)  
-        embeddings, pooled_embeddings = self.reduce(sequence_output), self.reduce(pooled_output) 
+        pooled_output = self.pooler(sequence_output, attention_mask)  
+        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output) 
 
         if not return_dict:
             return (embeddings, pooled_embeddings) + outputs[2:]
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=embeddings,
-            pooler_output=pooled_embeddings,
+        return ReducedModelOutputWithPooling(
+            reduced_last_hidden_state=reduced_seq,
+            reduced_pooler_output=reduced_pooled,
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

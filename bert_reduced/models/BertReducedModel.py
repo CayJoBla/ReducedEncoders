@@ -6,6 +6,7 @@ from transformers import BertModel
 
 from .DimReduce import DimReduce
 from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
+from ..outputs import ReducedModelOutputWithPoolingAndCrossAttentions
 
 class BertReducedModel(BertReducedPreTrainedModel):
     """
@@ -49,9 +50,11 @@ class BertReducedModel(BertReducedPreTrainedModel):
         if not return_dict:
             return (reduced_seq, reduced_pooled) + outputs[2:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=reduced_seq,
-            pooler_output=reduced_pooled,
+        return ReducedModelOutputWithPoolingAndCrossAttentions(
+            reduced_last_hidden_state=reduced_seq,
+            reduced_pooler_output=reduced_pooled,
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
