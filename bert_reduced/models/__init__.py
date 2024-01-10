@@ -1,11 +1,4 @@
-from .DimReduce import DimReduce
-from .BertReducedModel import BertReducedModel
-from .BertReducedForPreTraining import BertReducedForPreTraining
-from .BertReducedForSequenceClassification import BertReducedForSequenceClassification
-from .BertReducedPreTrainedModel import BertReducedPreTrainedModel
-from .DimReduceLayer import DimReduceLayer
-from .SBertPooler import SBertPooler
-from .SBertMPNetReducedModel import SBertMPNetReducedModel
-from .SBertMPNetReducedForSequenceClassification import SBertMPNetReducedForSequenceClassification
-from .AutoReducedModel import AutoReducedModel, AutoReducedModelForPreTraining, AutoReducedModelForSequenceClassification
-from .ReducedPreTrainedModel import ReducedPreTrainedModel
+from .auto_reduced import AutoReducedModel, AutoReducedModelForPreTraining, AutoReducedModelForSequenceClassification
+from .bert_reduced import BertReducedModel, BertReducedForPreTraining, BertReducedForSequenceClassification
+from .mpnet_reduced import SBertMPNetReducedModel, SBertMPNetReducedForSequenceClassification
+from .modeling_sbert import SBertPooler
