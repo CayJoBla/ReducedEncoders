@@ -5,7 +5,7 @@ import argparse
 from transformers import AutoTokenizer, BertTokenizer, BertConfig
 from huggingface_hub import get_full_repo_name, Repository
 
-from bert_reduced import BertReducedForPreTraining
+from reduced_encoders import BertReducedForPreTraining
 
 
 def main(base_model=None, reduced_size=48, model_name=None, tokenizer=None, output_dir=None, 

@@ -1,7 +1,7 @@
 # pretrain_bert.py
 
 from transformers import set_seed, AutoTokenizer, DataCollatorForLanguageModeling, TrainingArguments, Trainer
-from bert_reduced import BertReducedForPreTraining
+from reduced_encoders import BertReducedForPreTraining
 from datasets import load_dataset
 import argparse
 

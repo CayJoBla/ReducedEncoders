@@ -1,7 +1,7 @@
 # evaluate_mpnet_sbert.py
 
 from transformers import set_seed, AutoConfig, AutoTokenizer, TrainingArguments, Trainer, default_data_collator, TrainerCallback
-from bert_reduced import SBertMPNetReducedForSequenceClassification
+from reduced_encoders import SBertMPNetReducedForSequenceClassification
 from datasets import load_dataset
 import evaluate
 import numpy as np
