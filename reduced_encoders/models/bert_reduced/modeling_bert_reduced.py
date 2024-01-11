@@ -17,11 +17,6 @@ class BertReducedPreTrainedModel(ReducedPreTrainedModel):
     config_class = BertReducedConfig
     base_model_prefix = "bert"
 
-    def _initialize_config(self, config=None, reduction_sizes=(48,)):
-        """Set the default configuration for reduced BERT models"""
-        config = BertReducedConfig() if config is None else BertReducedConfig.from_config(config)
-        super()._initialize_config(config, reduction_sizes=reduction_sizes)
-
 
 # Recreate the BERT model heads, but with the reduced hidden state size
 class BertReducedLMPredictionHead(nn.Module):
@@ -74,8 +69,7 @@ class BertReducedModel(BertReducedPreTrainedModel):
             module will be initialized using the config.
     """
     def __init__(self, config=None, base_model=None, reduce_module=None):
-        self._initialize_config(config)
-        super().__init__(self.config)
+        super().__init__(config)
 
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
@@ -128,8 +122,7 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
             module will be initialized using the config.
     """
     def __init__(self, config=None, base_model=None, reduce_module=None):
-        self._initialize_config(config)
-        super().__init__(self.config)
+        super().__init__(config)
 
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
@@ -189,8 +182,13 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
             module will be initialized using the config.
     """
     def __init__(self, config=None, base_model=None, reduce_module=None):
-        self._initialize_config(config)
-        super().__init__(self.config)
+        super().__init__(config)
+
+        # Initialize the config for sequence classification
+        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
+            self.config.classifier_dropout = self.config.hidden_dropout_prob
+        if not hasattr(self.config, 'num_labels'):
+            self.config.num_labels = 2
         
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
@@ -199,12 +197,6 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
         
         self.post_init()
 
-    def _initialize_config(self, config=None, reduction_sizes=(48,)):
-        super()._initialize_config(config, reduction_sizes=reduction_sizes)
-        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
-            self.config.classifier_dropout = self.config.hidden_dropout_prob
-        if not hasattr(self.config, 'num_labels'):
-            self.config.num_labels = 2
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 labels=None, output_attentions=None, output_hidden_states=None, return_dict=None):

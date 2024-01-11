@@ -15,25 +15,15 @@ class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
     config_class = MPNetReducedConfig
     base_model_prefix = "mpnet" # TODO: Determine whether this needs to change ("sbert"?)
 
-    def _initialize_config(self, config=None, reduction_sizes=(48,)):
-        """Set the default configuration for reduced MPNet models"""
-        config = MPNetReducedConfig() if config is None else MPNetReducedConfig.from_config(config)
-        super()._initialize_config(config, reduction_sizes=reduction_sizes) # TODO: Figure out if this is necessary
-
 
 class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
-        self._initialize_config(config)
-        super().__init__(self.config)
+        super().__init__(config)
 
         self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         
-    def _initialize_config(self, config=None, reduction_sizes=(48,), pooling_mode="mean"):
-        super()._initialize_config(config=config, reduction_sizes=reduction_sizes)
-        if not hasattr(self.config, 'pooling_mode'):
-            config.pooling_mode = pooling_mode
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
@@ -77,23 +67,19 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
 
 class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
-        self._initialize_config(config)
-        super().__init__(self.config)
+        super().__init__(config)
+
+        # Initialize the config for sequence classification
+        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
+            self.config.classifier_dropout = self.config.hidden_dropout_prob
+        if not hasattr(self.config, 'num_labels'):
+            self.config.num_labels = 2
 
         self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         self.dropout = nn.Dropout(self.config.classifier_dropout)
         self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
-        
-    def _initialize_config(self, config=None, reduction_sizes=(48,), pooling_mode="mean"):
-        super()._initialize_config(config=config, reduction_sizes=reduction_sizes)
-        if not hasattr(self.config, 'pooling_mode'):
-            config.pooling_mode = pooling_mode
-        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
-            self.config.classifier_dropout = self.config.hidden_dropout_prob
-        if not hasattr(self.config, 'num_labels'):
-            self.config.num_labels = 2
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 labels=None, inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
