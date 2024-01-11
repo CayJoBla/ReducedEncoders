@@ -1,7 +1,7 @@
-from transformers.utils import ModelOutput
 import torch
-
+from dataclasses import dataclass
 from typing import Optional, Tuple
+from transformers.utils import ModelOutput
 
 @dataclass
 class ReducedModelOutput(ModelOutput):

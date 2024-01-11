@@ -5,20 +5,21 @@ from torch import nn
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, SequenceClassifierOutput
 from transformers.models.bert.modeling_bert import BertPreTrainingHeads, BertForPreTrainingOutput
 from transformers.activations import ACT2FN
-from transformers import BertConfig, BertModel
+from transformers import BertModel
 
-from ..modeling_reduced import ReducedPreTrainedModel, DimReduce
-from ..modeling_outputs import ReducedModelOutputWithPoolingAndCrossAttentions
+from ...modeling_reduced import ReducedPreTrainedModel, DimReduce
+from ...modeling_outputs import ReducedModelOutputWithPoolingAndCrossAttentions
+from .configuration_bert_reduced import BertReducedConfig
 
 
 class BertReducedPreTrainedModel(ReducedPreTrainedModel):
     """An abstract class for defining defaults for reduced BERT models."""
-    config_class = BertConfig
+    config_class = BertReducedConfig
     base_model_prefix = "bert"
 
     def _initialize_config(self, config=None, reduction_sizes=(48,)):
         """Set the default configuration for reduced BERT models"""
-        if config is None: config = BertConfig()
+        config = BertReducedConfig() if config is None else BertReducedConfig.from_config(config)
         super()._initialize_config(config, reduction_sizes=reduction_sizes)
 
 

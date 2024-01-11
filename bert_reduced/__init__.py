@@ -1,8 +1,11 @@
 from .models import (
+    BertReducedConfig,
+    BertReducedPreTrainedModel,
     BertReducedModel,
     BertReducedForPreTraining, 
-    BertReducedForSequenceClassification, 
-    BertReducedPreTrainedModel,  
+    BertReducedForSequenceClassification,   
+    MPNetReducedConfig,
+    MPNetReducedPreTrainedModel,
     SBertMPNetReducedModel,
     SBertMPNetReducedForSequenceClassification,
     AutoReducedModel,

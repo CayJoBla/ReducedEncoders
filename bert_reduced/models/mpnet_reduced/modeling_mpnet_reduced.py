@@ -1,23 +1,24 @@
 # modeling_mpnet_reduced.py
 
-from transformers import MPNetConfig, MPNetModel
+from transformers import MPNetModel
 from transformers.modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from torch import nn
 import torch
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
-from ..modeling_sbert import SBertPooler
+from .modeling_sbert import SBertPooler
+from .configuration_mpnet_reduced import MPNetReducedConfig
 
 
 class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
     """An abstract class for defining defaults for reduced MPNet models."""
-    config_class = MPNetConfig
-    base_model_prefix = "mpnet"
+    config_class = MPNetReducedConfig
+    base_model_prefix = "mpnet" # TODO: Determine whether this needs to change ("sbert"?)
 
     def _initialize_config(self, config=None, reduction_sizes=(48,)):
         """Set the default configuration for reduced MPNet models"""
-        if config is None: config = MPNetConfig()
-        super()._initialize_config(config, reduction_sizes=reduction_sizes)
+        config = MPNetReducedConfig() if config is None else MPNetReducedConfig.from_config(config)
+        super()._initialize_config(config, reduction_sizes=reduction_sizes) # TODO: Figure out if this is necessary
 
 
 class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):

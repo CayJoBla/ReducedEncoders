@@ -3,11 +3,8 @@
 import warnings
 from transformers import BertConfig, MPNetConfig, PretrainedConfig, AutoConfig
 
-from .BertReducedModel import BertReducedModel
-from .BertReducedForPreTraining import BertReducedForPreTraining 
-from .BertReducedForSequenceClassification import BertReducedForSequenceClassification
-from .SBertMPNetReducedModel import SBertMPNetReducedModel
-from .SBertMPNetReducedForSequenceClassification import SBertMPNetReducedForSequenceClassification
+from ..bert_reduced import BertReducedModel, BertReducedForPreTraining, BertReducedForSequenceClassification
+from ..mpnet_reduced import SBertMPNetReducedModel, SBertMPNetReducedForSequenceClassification
 
 MODEL_MAPPING = {
     BertConfig: BertReducedModel,
