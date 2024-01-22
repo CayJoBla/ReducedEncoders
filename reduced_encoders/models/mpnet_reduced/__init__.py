@@ -4,3 +4,4 @@ from .modeling_mpnet_reduced import (
     SBertMPNetReducedForSequenceClassification,
 )
 from .configuration_mpnet_reduced import MPNetReducedConfig
+from . import register_mpnet_reduced

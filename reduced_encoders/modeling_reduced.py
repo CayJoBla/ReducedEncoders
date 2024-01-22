@@ -34,6 +34,7 @@ class DimReduce(nn.Sequential):
     
         super().__init__(modules)
 
+
 class DimReduceLayer(nn.Module):
     """Layer of the DimReduce module, reducing the dimensionality of the hidden space. 
     Includes a linear layer, an activation function, and a dropout layer.
@@ -53,10 +54,32 @@ class DimReduceLayer(nn.Module):
         output = self.dropout(output)
         return output
 
+
+class DimReduceLoader(PreTrainedModel):
+    """A wrapper for the DimReduce module to load the pretrained reduction weights from a 
+    Huggingface hub model. This module is not meant to be run or included in a model."""
+    # These class values must remain unassigned so that the base_model_prefix is not used
+    config_class = None
+    base_model_prefix = ""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.reduce = DimReduce(config)
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        config = kwargs.pop('config', AutoConfig.from_pretrained(*args, **kwargs))
+        return super().from_pretrained(*args, config=config, **kwargs).reduce
+
+
 class ReducedPreTrainedModel(PreTrainedModel):
     """An abstract class for defining common methods between reduced models."""
     config_class = None
     base_model_prefix = ""
+
+    def __init__(self, config):
+        config = self.config_class.from_config(config)
+        super().__init__(config)
 
     def load_reduction(self, reduction_model_name_or_path, *args, **kwargs):
         """Load the weights of a pretrained dimensionality reduction module into the reduced model."""
@@ -65,12 +88,13 @@ class ReducedPreTrainedModel(PreTrainedModel):
     @staticmethod
     def _is_reduced_model(config):
         """Determine whether a model is a reduced model from the config."""
+        # TODO: May need an update for resiliency to changes in config / other configs with those parameters
         return "reduction_sizes" in config.__dict__ or "reduced_size" in config.__dict__
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
                         base_model_class=None, **kwargs):
-        # Load the config for the model
+        # Load the config for the model (potentially a base model config)
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         is_reduced_model = cls._is_reduced_model(config)
 

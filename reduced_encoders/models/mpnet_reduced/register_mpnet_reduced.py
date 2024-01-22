@@ -1,0 +1,8 @@
+from transformers import AutoConfig, AutoModel, AutoModelForPreTraining, AutoModelForSequenceClassification
+from .configuration_mpnet_reduced import MPNetReducedConfig
+from .modeling_mpnet_reduced import SBertMPNetReducedModel, SBertMPNetReducedForSequenceClassification
+
+AutoConfig.register(MPNetReducedConfig.model_type, MPNetReducedConfig)
+AutoModel.register(MPNetReducedConfig, SBertMPNetReducedModel)
+AutoModelForPreTraining.register(MPNetReducedConfig, SBertMPNetReducedModel)
+AutoModelForSequenceClassification.register(MPNetReducedConfig, SBertMPNetReducedForSequenceClassification)

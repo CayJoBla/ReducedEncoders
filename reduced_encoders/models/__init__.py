@@ -1,3 +1,2 @@
-from .auto_reduced import AutoReducedModel, AutoReducedModelForPreTraining, AutoReducedModelForSequenceClassification
 from .bert_reduced import BertReducedPreTrainedModel, BertReducedModel, BertReducedForPreTraining, BertReducedForSequenceClassification, BertReducedConfig
 from .mpnet_reduced import MPNetReducedPreTrainedModel, SBertMPNetReducedModel, SBertMPNetReducedForSequenceClassification, MPNetReducedConfig

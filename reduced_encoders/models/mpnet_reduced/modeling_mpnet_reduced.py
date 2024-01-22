@@ -20,6 +20,7 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
         super().__init__(config)
 
+        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
@@ -56,14 +57,6 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
-                        base_model_class=None, **kwargs):
-        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, 
-                                        reduce_module=reduce_module, base_model_class=base_model_class, 
-                                        **kwargs)
-
 
 class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
@@ -75,6 +68,7 @@ class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
         if not hasattr(self.config, 'num_labels'):
             self.config.num_labels = 2
 
+        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
@@ -133,11 +127,3 @@ class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
-                        base_model_class=None, **kwargs):
-        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, reduce_module=reduce_module, 
-                                        base_model_class=base_model_class, **kwargs)
