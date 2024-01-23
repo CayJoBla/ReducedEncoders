@@ -1,11 +1,12 @@
 # modeling_mpnet_reduced.py
 
 from transformers import MPNetModel
-from transformers.modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
+from transformers.modeling_outputs import SequenceClassifierOutput
 from torch import nn
 import torch
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
+from ...modeling_outputs import ReducedModelOutputWithPooling
 from .modeling_sbert import SBertPooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
 
