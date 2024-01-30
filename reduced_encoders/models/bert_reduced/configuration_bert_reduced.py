@@ -13,9 +13,9 @@ class BertReducedConfig(BertConfig):
         self.reduced_size = reduction_sizes[-1]
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         if isinstance(config, BertConfig):
-            config = cls(**config.__dict__)
+            config = cls(**config.__dict__, **kwargs)
         else:
             raise ValueError("Parameter config should be an instance of class `BertConfig`.")
         config.model_type = cls.model_type

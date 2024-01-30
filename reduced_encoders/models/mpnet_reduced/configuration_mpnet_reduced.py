@@ -14,9 +14,9 @@ class MPNetReducedConfig(MPNetConfig):
         self.pooling_mode = pooling_mode
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         if isinstance(config, MPNetConfig):
-            config = cls(**config.__dict__)
+            config = cls(**config.__dict__, **kwargs)
         else:
             raise ValueError("Parameter config should be an instance of class `MPNetConfig`.")
         config.model_type = cls.model_type
