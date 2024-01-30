@@ -4,6 +4,7 @@ from transformers import MPNetModel
 from transformers.modeling_outputs import SequenceClassifierOutput
 from torch import nn
 import torch
+from torch.nn.functional import mse_loss
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
 from ...modeling_outputs import ReducedModelOutputWithPooling
@@ -15,6 +16,67 @@ class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
     """An abstract class for defining defaults for reduced MPNet models."""
     config_class = MPNetReducedConfig
     base_model_prefix = "mpnet" # TODO: Determine whether this needs to change ("sbert"?)
+
+
+class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
+    def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
+        super().__init__(config)
+
+        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
+        self.mpnet = base_model or MPNetModel(self.config, **kwargs)
+        self.pooler = SBertPooler(self.config)
+        self.reduce = reduce_module or DimReduce(self.config)
+
+    def _get_similarities(self, embeddings):
+        """Returned the flattened upper triangular cosine similarity matrix of the given embeddings."""
+        cos_sim = torch.nn.CosineSimilarity(dim=-1, eps=1e-6)
+        similarity_matrix = cos_sim(embeddings.unsqueeze(0), embeddings.unsqueeze(1))
+        indices = torch.triu_indices(*similarity_matrix.shape, offset=1)
+        return similarity_matrix[indices[0], indices[1]]
+        
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
+                inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.mpnet(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        sequence_output = outputs[0]
+        pooled_output = self.pooler(sequence_output, attention_mask)  
+        reduced_pooled = self.reduce(pooled_output)
+
+        # TODO: There are ways to compute the loss at each layer of the reduction, is that something possible/something we want to do?
+
+        # Compute contrastive loss
+        full_similarity = self._get_similarities(pooled_output)
+        reduced_similarity = self._get_similarities(reduced_pooled)
+        contrastive_loss = mse_loss(full_similarity, reduced_similarity)
+        print(full_similarity)
+        print(reduced_similarity)
+
+        # Compute reconstruction loss
+        # TODO: Decide whether to implement this loss
+        reconstruction_loss = 0     
+
+        # Compute total loss
+        loss = contrastive_loss + reconstruction_loss
+
+        if not return_dict:
+            return (embeddings, pooled_embeddings) + outputs[2:]
+
+        return CompressedModelForPreTrainingOutput(
+            loss=loss,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):

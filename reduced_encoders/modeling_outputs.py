@@ -61,3 +61,21 @@ class ReducedModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     unreduced_pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+@dataclass
+class CompressedModelForPreTrainingOutput(ModelOutput):
+    """
+    Ouput type of ['MPNetCompressedForPretraining']
+
+    Args:
+        loss (torch.FloatTensor): Linear combination of the contrastive learning and the reconstruction loss. The contrastive 
+            learning loss is the MSE between the cosine similarity of data pairs in the original and reduced embeddings. 
+            The reconstruction loss is the MSE between the original and decoded reduced embeddings.
+        hidden_states (tuple(torch.FloatTensor)): Hidden-states of the model at the output of each layer
+        attentions (tuple(torch.FloatTensor)): Attentions weights after the attention softmax, used to compute the weighted 
+            average in the self-attention heads.
+    """
+    loss: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    
