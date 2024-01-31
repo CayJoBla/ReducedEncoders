@@ -4,5 +4,5 @@ from .modeling_mpnet_reduced import SBertMPNetReducedModel, SBertMPNetReducedFor
 
 AutoConfig.register(MPNetReducedConfig.model_type, MPNetReducedConfig)
 AutoModel.register(MPNetReducedConfig, SBertMPNetReducedModel)
-AutoModelForPreTraining.register(MPNetReducedConfig, SBertMPNetReducedModel)
+AutoModelForPreTraining.register(MPNetReducedConfig, MPNetCompressedForPretraining)
 AutoModelForSequenceClassification.register(MPNetReducedConfig, SBertMPNetReducedForSequenceClassification)

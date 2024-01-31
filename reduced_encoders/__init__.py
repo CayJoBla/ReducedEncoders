@@ -8,6 +8,7 @@ from .models import (
     MPNetReducedPreTrainedModel,
     SBertMPNetReducedModel,
     SBertMPNetReducedForSequenceClassification,
+    MPNetCompressedForPretraining,
 )
 from .modeling_reduced import (
     DimReduce, 
