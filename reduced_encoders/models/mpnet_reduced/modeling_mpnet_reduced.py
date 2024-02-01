@@ -8,6 +8,7 @@ from torch.nn.functional import mse_loss
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
 from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
+from ...modeling_utils import compressed_contrastive_loss
 from .modeling_sbert import SBertPooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
 
@@ -56,11 +57,7 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
         # TODO: There are ways to compute the loss at each layer of the reduction, is that something possible/something we want to do?
 
         # Compute contrastive loss
-        full_similarity = self._get_similarities(pooled_output)
-        reduced_similarity = self._get_similarities(reduced_pooled)
-        contrastive_loss = mse_loss(full_similarity, reduced_similarity)
-        print(full_similarity)
-        print(reduced_similarity)
+        contrastive_loss = compressed_contrastive_loss(pooled_output, reduced_pooled)
 
         # Compute reconstruction loss
         # TODO: Decide whether to implement this loss
