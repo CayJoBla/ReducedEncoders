@@ -7,7 +7,7 @@ import torch
 from torch.nn.functional import mse_loss
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
-from ...modeling_outputs import ReducedModelOutputWithPooling
+from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
 from .modeling_sbert import SBertPooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
 
