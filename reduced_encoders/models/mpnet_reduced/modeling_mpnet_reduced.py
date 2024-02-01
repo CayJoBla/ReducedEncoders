@@ -27,13 +27,6 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SBertPooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
-
-    def _get_similarities(self, embeddings):
-        """Returned the flattened upper triangular cosine similarity matrix of the given embeddings."""
-        cos_sim = torch.nn.CosineSimilarity(dim=-1, eps=1e-6)
-        similarity_matrix = cos_sim(embeddings.unsqueeze(0), embeddings.unsqueeze(1))
-        indices = torch.triu_indices(*similarity_matrix.shape, offset=1)
-        return similarity_matrix[indices[0], indices[1]]
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
