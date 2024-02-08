@@ -76,6 +76,9 @@ class CompressedModelForPreTrainingOutput(ModelOutput):
             average in the self-attention heads.
     """
     loss: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    contrastive_loss: torch.FloatTensor = None
+    reconstruction_loss: torch.FloatTensor = None
+    pooled_output: torch.FloatTensor = None
+    reduced_pooled_output: torch.FloatTensor = None
+    reconstructed_pooled_output: torch.FloatTensor = None
     

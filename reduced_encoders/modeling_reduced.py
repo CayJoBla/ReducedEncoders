@@ -35,6 +35,32 @@ class DimReduce(nn.Sequential):
         super().__init__(modules)
 
 
+class Decoder(nn.Sequential):
+    """A module used during pretraining of a compressed model that transforms the 
+    reduced model embeddings back into full-size model embeddings with the goal
+    of matching the original embeddings as closely as possible.
+
+    The structure of the model closely follows that of the DimReduce module, but reverses
+    the order of the reduction_sizes parameter for the intermediate layer sizes to go from
+    smallest to largest instead of largest to smallest.
+    """
+    def __init__(self, config, modules=None):
+        input_size = config.reduced_size
+        self.decoding_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
+
+        DecoderLayer = DimReduceLayer   # Use the same structure as the DimReduce module
+        
+        if modules is None:
+            modules = OrderedDict()
+            for i, decoding_size in enumerate(self.decoding_sizes):   
+                modules[str(i)] = DecoderLayer(input_size, decoding_size, config)
+                input_size = decoding_size
+        elif not isinstance(modules, OrderedDict):
+            modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
+    
+        super().__init__(modules)
+
+
 class DimReduceLayer(nn.Module):
     """Layer of the DimReduce module, reducing the dimensionality of the hidden space. 
     Includes a linear layer, an activation function, and a dropout layer.

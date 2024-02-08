@@ -1,6 +1,7 @@
 from torch.nn.functional import mse_loss
+import torch
 
-def get_cos_sim(self, embeddings):
+def get_cos_sim(embeddings):
     """Returned the flattened upper triangular cosine similarity matrix of the given embeddings."""
     cos_sim = torch.nn.CosineSimilarity(dim=-1, eps=1e-6)
     similarity_matrix = cos_sim(embeddings.unsqueeze(0), embeddings.unsqueeze(1))

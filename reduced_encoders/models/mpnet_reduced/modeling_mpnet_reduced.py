@@ -6,7 +6,7 @@ from torch import nn
 import torch
 from torch.nn.functional import mse_loss
 
-from ...modeling_reduced import DimReduce, ReducedPreTrainedModel
+from ...modeling_reduced import DimReduce, ReducedPreTrainedModel, Decoder
 from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
 from ...modeling_utils import compressed_contrastive_loss
 from .modeling_sbert import SBertPooler
@@ -20,16 +20,26 @@ class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
 
 
 class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
-    def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
+    def __init__(self, config=None, base_model=None, reduce_module=None, alpha=1, beta=1, **kwargs):
         super().__init__(config)
 
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SBertPooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
+
+        self.do_contrast = alpha > 0
+        self.do_reconstruction = beta > 0
+
+        if self.do_reconstruction:
+            self.decoder = Decoder(self.config)
+
+        self.alpha = alpha
+        self.beta = beta
         
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
-                inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
+                inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None, return_loss=True):
+                    # Need return_loss parameter with default as True to let trainer return evaluation loss
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mpnet(
@@ -49,23 +59,33 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
 
         # TODO: There are ways to compute the loss at each layer of the reduction, is that something possible/something we want to do?
 
-        # Compute contrastive loss
-        contrastive_loss = compressed_contrastive_loss(pooled_output, reduced_pooled)
+        if return_loss:
+            # Compute contrastive loss
+            contrastive_loss = 0
+            if self.do_contrast:
+                contrastive_loss = compressed_contrastive_loss(pooled_output, reduced_pooled)
 
-        # Compute reconstruction loss
-        # TODO: Decide whether to implement this loss
-        reconstruction_loss = 0     
+            # Compute reconstruction loss
+            reconstruction_loss = 0
+            if self.do_reconstruction:
+                decoded_reduced_pooled_output = self.decoder(reduced_pooled)
+                reconstruction_loss = mse_loss(pooled_output, decoded_reduced_pooled_output)  
 
-        # Compute total loss
-        loss = contrastive_loss + reconstruction_loss
+            # Compute total loss
+            total_weighted_loss = self.alpha*contrastive_loss + self.beta*reconstruction_loss
+        else:
+            contrastive_loss, reconstruction_loss, total_weighted_loss = None, None, None
 
         if not return_dict:
-            return (embeddings, pooled_embeddings) + outputs[2:]
+            return (total_weighted_loss, contrastive_loss, reconstruction_loss, )
 
         return CompressedModelForPreTrainingOutput(
-            loss=loss,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=total_weighted_loss,
+            contrastive_loss=contrastive_loss,
+            reconstruction_loss=reconstruction_loss,
+            pooled_output=pooled_output,
+            reduced_pooled_output=reduced_pooled,
+            reconstructed_pooled_output=decoded_reduced_pooled_output if self.do_reconstruction else None,
         )
 
 
