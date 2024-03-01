@@ -3,6 +3,7 @@
 from transformers import set_seed, AutoTokenizer, DataCollatorWithPadding, TrainingArguments, Trainer, TrainerCallback
 from reduced_encoders import MPNetCompressedForPretraining
 from datasets import load_dataset
+from datasets.utils.logging import disable_progress_bar
 import argparse
 from functools import partial
 
@@ -10,8 +11,8 @@ from custom_trainer import CustomTrainer
 
 def train(model=None, dataset_path=None, dataset_name=None, split="train", tokenizer=None, revision="main", train_size=None, 
           validation_size=None, batch_size=16, eval_strategy="steps", eval_steps=50000, save_strategy="steps", save_steps=50000, 
-          logging_steps=50, learning_rate=2e-4, num_epochs=1, alpha=1., beta=1., checkpoint=None, output_dir=None, push_to_hub=False, 
-          run_name=None, seed=None, verbose=False):
+          logging_steps=50, learning_rate=2e-4, num_epochs=1, do_contrast=True, do_reconstruction=True, checkpoint=None, 
+          output_dir=None, push_to_hub=False, run_name=None, seed=None, disable_tqdm=False, verbose=False):
     ## Set seed
     if seed is not None:
         set_seed(seed)
@@ -22,8 +23,8 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
     model = MPNetCompressedForPretraining.from_pretrained(
                 model_name, 
                 revision=revision,
-                alpha=alpha, 
-                beta=beta
+                do_contrast=do_contrast,
+                do_reconstruction=do_reconstruction,
                 )
 
     ## Load tokenizer
@@ -40,6 +41,9 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
     dataset = load_dataset(dataset_path, dataset_name, split=split)
 
     ## Preprocess the data
+    if disable_tqdm:
+        disable_progress_bar()
+
     def preprocess_data(batch):
         return tokenizer(batch["text"], truncation=True)    # No padding, we pad in the data collator
 
@@ -48,7 +52,7 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
 
     ## Create a train and validation split of the preprocessed data    
     if verbose: print(f"Creating a train and validation split of the preprocessed data...")
-    if train_size is None and validation_size is None: # train_test_split should handle other cases or 
+    if train_size is None and validation_size is None: # train_test_split function should handle all other cases 
         train_size = 0.9 
     input_data = preprocessed.train_test_split(train_size=train_size, test_size=validation_size, seed=seed)
 
@@ -76,18 +80,9 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
         push_to_hub=push_to_hub,
         logging_steps=logging_steps,
         run_name=run_name,
+        disable_tqdm=disable_tqdm,
+        dataloader_drop_last=True, # Ensure full batches (NaN values if only 1 sample in last batch)
     )
-
-    # Initialize custom Trainer and metrics to log contrastive and reconstruction losses
-    # def compute_metrics(eval_pred, loss_index_mapping=None):
-    #     model_output = eval_pred.predictions
-    #     out_dict = {}
-    #     if loss_index_mapping is not None:
-    #         for k, v in loss_index_mapping.items():
-    #             out_dict[k] = model_output[v].mean().item()
-    #     return out_dict
-
-    extra_loss_index_mapping = {"contrastive_loss": 0, "reconstruction_loss": 1}    # TODO: This should be pulled from the model
 
     trainer = CustomTrainer(
         model=model,
@@ -98,17 +93,9 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
         tokenizer=tokenizer,
         # extra_losses=list(extra_loss_index_mapping.keys()),
         # compute_metrics=partial(compute_metrics, loss_index_mapping=extra_loss_index_mapping),
-        extra_loss_index_mapping=extra_loss_index_mapping,
+        extra_loss_index_mapping=model._get_extra_loss_index_mapping(),
         do_initial_eval=True,
     )
-
-    # ## Add initial evaluation
-    # class EvaluateFirstStepCallback(TrainerCallback):
-    #     def on_step_begin(self, args, state, control, **kwargs):
-    #         if state.global_step == 0:
-    #             control.should_evaluate = True
-
-    # trainer.add_callback(EvaluateFirstStepCallback())
 
     ## Train the model
     if checkpoint == "latest": checkpoint = True
@@ -225,16 +212,18 @@ if __name__ == "__main__":
         default=50
     )
     parser.add_argument(
-        '--alpha',
-        help=("The weight given to the constrastive loss during training. Default is 1."),
-        type=float,
-        default=1
+        '--no_contrast',
+        help=("Indicates that contrastive loss should not be used during training. Default is to use contrastive loss."),
+        default=True,
+        action="store_false",
+        dest="do_contrast"
     )
     parser.add_argument(
-        '--beta',
-        help=("The weight given to the reconstruction loss during training. Default is 1."),
-        type=float,
-        default=1
+        '--no_reconstruction',
+        help=("Indicates that reconstruction loss should not be used during training. Default is to use reconstruction loss."),
+        default=True,
+        action="store_false",
+        dest="do_reconstruction"
     )
     parser.add_argument(
         '--output_dir',
@@ -259,6 +248,12 @@ if __name__ == "__main__":
         help=("The seed to use for randomness in preprocessing. Default is None."),
         type=int,
         default=None
+    )
+    parser.add_argument(
+        '--disable_tqdm',
+        help=("Indicates that tqdm should be disabled. Default is False."),
+        default=False,
+        action="store_true"
     )
     parser.add_argument(
         '--verbose',

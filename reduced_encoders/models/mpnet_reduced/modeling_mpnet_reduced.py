@@ -20,23 +20,43 @@ class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
 
 
 class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
-    def __init__(self, config=None, base_model=None, reduce_module=None, alpha=1, beta=1, **kwargs):
+    def __init__(self, config=None, base_model=None, reduce_module=None, do_contrast=True, do_reconstruction=True, **kwargs):
         super().__init__(config)
 
+        # Set up the losses
+        if not do_contrast and not do_reconstruction:
+            raise ValueError("At least one of do_contrast and do_reconstruction must be True")
+        self.do_contrast = do_contrast
+        self.do_reconstruction = do_reconstruction
+
+        # Construct the model
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SBertPooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
-
-        self.do_contrast = alpha > 0
-        self.do_reconstruction = beta > 0
-
-        if self.do_reconstruction:
-            self.decoder = Decoder(self.config)
-
-        self.alpha = alpha
-        self.beta = beta
+        self.decoder = Decoder(self.config) if self.do_reconstruction else None
         
+        # Set up the hyperparameters
+        self.params = nn.ParameterDict({
+            'contrastive_weight': nn.Parameter(torch.tensor(.5), requires_grad=do_contrast),
+            'reconstruction_weight': nn.Parameter(torch.tensor(.5), requires_grad=do_reconstruction),
+        })
+
+    def get_extra_logging_dict(self):
+        """Returns a dictionary of extra parameters to log during training."""
+        return {k: v.item() for k, v in self.params.items()}
+
+    def _get_extra_loss_index_mapping(self):
+        """Returns a dictionary mapping the extra losses to their indices in the output tuple. 
+        Note that the indices are offset by 1 to account for the `loss` output being removed before the other losses are considered.
+        """
+        index_mapping = {}
+        if self.do_contrast:
+            index_mapping.update({"contrastive_loss": 0})
+        if self.do_reconstruction:
+            index_mapping.update({"reconstruction_loss": 1})
+        return index_mapping
+
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None, return_loss=True):
                     # Need return_loss parameter with default as True to let trainer return evaluation loss
@@ -57,8 +77,6 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
         pooled_output = self.pooler(sequence_output, attention_mask)  
         reduced_pooled = self.reduce(pooled_output)
 
-        # TODO: There are ways to compute the loss at each layer of the reduction, is that something possible/something we want to do?
-
         if return_loss:
             # Compute contrastive loss
             contrastive_loss = 0
@@ -71,13 +89,20 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
                 decoded_reduced_pooled_output = self.decoder(reduced_pooled)
                 reconstruction_loss = mse_loss(pooled_output, decoded_reduced_pooled_output)  
 
-            # Compute total loss
-            total_weighted_loss = self.alpha*contrastive_loss + self.beta*reconstruction_loss
+            # Compute total loss (w1 L1 + w2 L2 - 1/2 log(w1 w2))
+            # We add a homoscedastic regularization term to help train the alpha and beta hyperparameters
+            weighted_contrastive_loss = self.params.contrastive_weight * contrastive_loss
+            weighted_reconstruction_loss = self.params.reconstruction_weight * reconstruction_loss
+            regularization_term = -.5*torch.log(self.params.contrastive_weight * self.params.reconstruction_weight)
+            
+            total_weighted_loss = weighted_contrastive_loss + weighted_reconstruction_loss + regularization_term
+
         else:
             contrastive_loss, reconstruction_loss, total_weighted_loss = None, None, None
 
         if not return_dict:
-            return (total_weighted_loss, contrastive_loss, reconstruction_loss, )
+            return (total_weighted_loss, contrastive_loss, reconstruction_loss, pooled_output, reduced_pooled, 
+                    decoded_reduced_pooled_output if self.do_reconstruction else None)
 
         return CompressedModelForPreTrainingOutput(
             loss=total_weighted_loss,

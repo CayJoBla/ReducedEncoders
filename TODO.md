@@ -1,23 +1,20 @@
-
-
 ## Organization
-* Fix the disorganization in both git repos
-* Organize the output for the SBERT reduced model
-* Define reduced model output classes (?)
-* Group models of similar types in a single file
-* Rename the package to something more general (e.g. `reduced_models` or `transformers_reduced`)
-* Add an AutoReducedModel class that can be used to automatically load the correct reduced model class based on the model type
 * Separate the package into a separate git repo (?)
 
 ## SBERT Reduced
-* Write a training script for SBERT reduced
-* Evaluate SBERT on the GLUE tasks
+* Try submitting the SBERT reduced model to GLUE
 
 ## BERT Reduced
-* Make the local BERT reduced model consistent with hub model
 * Fix the problems with the GLUE submission
 
+## CompreSBERT
+* Add model to the AutoModel registration
+* Create a SequenceClassification version of the model
+* Finish training the model (how many epochs? 3?)
+* Test the model on the GLUE tasks
+* Test the model on clustering / topic modeling
+* Submit the model for GLUE tasks
+
 ## Administrative
-* Look for where to publish the paper (not super big, not AAAI)
 * Look at starting the paper (reduction, topic modeling)
-* Look at topic modeling
+* Look for where to publish the paper (not super big, not AAAI)
