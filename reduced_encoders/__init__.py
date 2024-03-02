@@ -9,9 +9,12 @@ from .models import (
     SBertMPNetReducedModel,
     SBertMPNetReducedForSequenceClassification,
     MPNetCompressedForPretraining,
+    MPNetCompressedModel,
+    MPNetCompressedForSequenceClassification
 )
 from .modeling_reduced import (
     DimReduce, 
     DimReduceLayer,
     ReducedPreTrainedModel,
+    Decoder
 )
