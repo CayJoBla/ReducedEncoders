@@ -9,6 +9,7 @@ from transformers import BertModel
 
 from ...modeling_reduced import ReducedPreTrainedModel, DimReduce
 from ...modeling_outputs import ReducedModelOutputWithPoolingAndCrossAttentions
+from ...modeling_utils import sequence_classification_loss
 from .configuration_bert_reduced import BertReducedConfig
 
 
@@ -219,28 +220,8 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
         reduced_output = self.dropout(reduced_output)
         logits = self.classifier(reduced_output)
 
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.config.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+        loss = sequence_classification_loss(logits, labels, self.config) if labels is not None else None
 
-            if self.config.problem_type == "regression":
-                loss_fct = nn.MSELoss()
-                if self.config.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = nn.BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
