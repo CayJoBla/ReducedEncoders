@@ -6,8 +6,8 @@ from .models import (
     BertReducedForSequenceClassification,   
     MPNetReducedConfig,
     MPNetReducedPreTrainedModel,
-    SBertMPNetReducedModel,
-    SBertMPNetReducedForSequenceClassification,
+    MPNetReducedModel,
+    MPNetReducedForSequenceClassification,
     MPNetCompressedForPretraining,
     MPNetCompressedModel,
     MPNetCompressedForSequenceClassification

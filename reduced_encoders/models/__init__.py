@@ -7,8 +7,8 @@ from .bert_reduced import (
 )
 from .mpnet_reduced import (
     MPNetReducedPreTrainedModel, 
-    SBertMPNetReducedModel, 
-    SBertMPNetReducedForSequenceClassification, 
+    MPNetReducedModel, 
+    MPNetReducedForSequenceClassification, 
     MPNetReducedConfig, 
     MPNetCompressedForPretraining, 
     MPNetCompressedModel, 

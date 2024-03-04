@@ -16,7 +16,7 @@ from .configuration_mpnet_reduced import MPNetReducedConfig
 class MPNetReducedPreTrainedModel(ReducedPreTrainedModel):
     """An abstract class for defining defaults for reduced MPNet models."""
     config_class = MPNetReducedConfig
-    base_model_prefix = "mpnet" # TODO: Determine whether this needs to change ("sbert"?)
+    base_model_prefix = "mpnet"
 
 
 class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
@@ -219,12 +219,12 @@ class MPNetCompressedForSequenceClassification(MPNetReducedPreTrainedModel):
         )
 
 
-class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
+class MPNetReducedModel(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
         super().__init__(config)
 
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
-        self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
+        self.mpnet = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         
@@ -233,7 +233,7 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.sbert(
+        outputs = self.mpnet(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -261,7 +261,7 @@ class SBertMPNetReducedModel(MPNetReducedPreTrainedModel):
         )
 
 
-class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
+class MPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None, **kwargs):
         super().__init__(config)
 
@@ -272,7 +272,7 @@ class SBertMPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
             self.config.num_labels = 2
 
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
-        self.sbert = MPNetModel(self.config, **kwargs) if base_model is None else base_model
+        self.mpnet = MPNetModel(self.config, **kwargs) if base_model is None else base_model
         self.pooler = SBertPooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         self.dropout = nn.Dropout(self.config.classifier_dropout)
