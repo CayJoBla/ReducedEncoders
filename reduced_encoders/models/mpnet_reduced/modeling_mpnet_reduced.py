@@ -6,7 +6,7 @@ from torch import nn
 import torch
 from torch.nn.functional import mse_loss
 
-from ...modeling_reduced import DimReduce, ReducedPreTrainedModel, Decoder
+from ...modeling_reduced import DimReduce, ReducedPreTrainedModel, DimExpand
 from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
 from ...modeling_utils import compressed_contrastive_loss, sequence_classification_loss, SentencePooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
@@ -33,7 +33,7 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
-        self.decoder = Decoder(self.config) if self.do_reconstruction else None
+        self.expand = DimExpand(self.config) if self.do_reconstruction else None
         
         # Set up the hyperparameters
         self.params = nn.ParameterDict({
@@ -85,7 +85,7 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
             # Compute reconstruction loss
             reconstruction_loss = 0
             if self.do_reconstruction:
-                decoded_reduced_pooled_output = self.decoder(reduced_pooled)
+                decoded_reduced_pooled_output = self.expand(reduced_pooled)
                 reconstruction_loss = mse_loss(pooled_output, decoded_reduced_pooled_output)  
 
             # TODO: Figure out why I am getting NaN values 
@@ -132,7 +132,7 @@ class MPNetCompressedModel(MPNetReducedPreTrainedModel):
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
-        self.decoder = Decoder(self.config)     # Not needed, but included if we want to use it later 
+        self.expand = DimExpand(self.config)    # Not needed, but included if we want to use it later 
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):

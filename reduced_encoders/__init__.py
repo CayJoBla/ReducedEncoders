@@ -13,8 +13,8 @@ from .models import (
     MPNetCompressedForSequenceClassification
 )
 from .modeling_reduced import (
+    DimReshape,
     DimReduce, 
-    DimReduceLayer,
+    DimExpand,
     ReducedPreTrainedModel,
-    Decoder
 )

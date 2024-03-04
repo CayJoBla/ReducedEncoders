@@ -6,6 +6,28 @@ from transformers import PreTrainedModel, AutoConfig, PretrainedConfig, AutoMode
 from transformers.activations import ACT2FN
 import warnings
 
+
+class DimReshape(nn.Module):
+    """Layer that changes the dimensionality of the hidden space / embeddings.
+    Currently used in both the DimReduce and DimReconstruct modules.
+    Includes a linear layer, an activation function, and a dropout layer.
+    """
+    def __init__(self, input_size, output_size, config):
+        super().__init__()
+        self.linear = nn.Linear(input_size, output_size)
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        
+    def forward(self, x):
+        output = self.linear(x)
+        output = self.activation(output)
+        output = self.dropout(output)
+        return output
+
+
 class DimReduce(nn.Sequential):
     """
     Module to insert between the base transformer model and the model head in order to reduce 
@@ -23,6 +45,7 @@ class DimReduce(nn.Sequential):
     def __init__(self, config, modules=None):
         input_size = config.hidden_size
         self.reduction_sizes = config.reduction_sizes
+        DimReduceLayer = DimReshape     # Pick the layer type to use for the reduction layers
         
         if modules is None:
             modules = OrderedDict()
@@ -35,50 +58,36 @@ class DimReduce(nn.Sequential):
         super().__init__(modules)
 
 
-class Decoder(nn.Sequential):
+class DimExpand(nn.Sequential):
     """A module used during pretraining of a compressed model that transforms the 
-    reduced model embeddings back into full-size model embeddings with the goal
-    of matching the original embeddings as closely as possible.
+    reduced embeddings back into full-size model embeddings with the goal of matching 
+    the original embeddings as closely as possible.
 
     The structure of the model closely follows that of the DimReduce module, but reverses
     the order of the reduction_sizes parameter for the intermediate layer sizes to go from
     smallest to largest instead of largest to smallest.
+
+    Args:
+        config (PretrainedConfig): Configuration for the base model. Should include the hidden_size
+            and reduction_sizes parameters for the dimensions of each layer of this module.
+        modules (OrderedDict): An optional ordered dictionary of modules to load the expansion
+            layers from. If not specified, the expansion layers will be randomly initialized, 
+            using the sizes from the reduction_sizes parameter in the configuration.
     """
     def __init__(self, config, modules=None):
         input_size = config.reduced_size
-        self.decoding_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
-
-        DecoderLayer = DimReduceLayer   # Use the same structure as the DimReduce module
+        self.expansion_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
+        DimExpandLayer = DimReshape    # Pick the layer type to use for the expansion layers
         
         if modules is None:
             modules = OrderedDict()
-            for i, decoding_size in enumerate(self.decoding_sizes):   
-                modules[str(i)] = DecoderLayer(input_size, decoding_size, config)
+            for i, decoding_size in enumerate(self.expansion_sizes):   
+                modules[str(i)] = DimExpandLayer(input_size, decoding_size, config)
                 input_size = decoding_size
         elif not isinstance(modules, OrderedDict):
             modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
     
         super().__init__(modules)
-
-
-class DimReduceLayer(nn.Module):
-    """Layer of the DimReduce module, reducing the dimensionality of the hidden space. 
-    Includes a linear layer, an activation function, and a dropout layer.
-    """
-    def __init__(self, input_size, output_size, config):
-        super().__init__()
-        self.linear = nn.Linear(input_size, output_size)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        
-    def forward(self, x):
-        output = self.linear(x)
-        output = self.activation(output)
-        output = self.dropout(output)
-        return output
 
 
 class DimReduceLoader(PreTrainedModel):
@@ -162,10 +171,3 @@ class ReducedPreTrainedModel(PreTrainedModel):
                 model = cls(config=config, base_model=base_model, reduce_module=reduce_module)
         
         return model
-            
-
-
-
-
-
-        
