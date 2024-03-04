@@ -9,6 +9,7 @@ from torch.nn.functional import mse_loss
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel, Decoder
 from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
 from ...modeling_utils import compressed_contrastive_loss, sequence_classification_loss
+from .modeling_sbert import SBertPooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
 
 
