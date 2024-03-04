@@ -8,8 +8,7 @@ from torch.nn.functional import mse_loss
 
 from ...modeling_reduced import DimReduce, ReducedPreTrainedModel, Decoder
 from ...modeling_outputs import ReducedModelOutputWithPooling, CompressedModelForPreTrainingOutput
-from ...modeling_utils import compressed_contrastive_loss, sequence_classification_loss
-from .modeling_sbert import SBertPooler
+from ...modeling_utils import compressed_contrastive_loss, sequence_classification_loss, SentencePooler
 from .configuration_mpnet_reduced import MPNetReducedConfig
 
 
@@ -32,7 +31,7 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
         # Construct the model
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
-        self.pooler = SBertPooler(self.config)
+        self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
         self.decoder = Decoder(self.config) if self.do_reconstruction else None
         
@@ -131,7 +130,7 @@ class MPNetCompressedModel(MPNetReducedPreTrainedModel):
         # Construct the model
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
-        self.pooler = SBertPooler(self.config)
+        self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
         self.decoder = Decoder(self.config)     # Not needed, but included if we want to use it later 
 
@@ -180,7 +179,7 @@ class MPNetCompressedForSequenceClassification(MPNetReducedPreTrainedModel):
         # Construct the model
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
-        self.pooler = SBertPooler(self.config)
+        self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
         self.dropout = nn.Dropout(self.config.classifier_dropout)
         self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
@@ -225,7 +224,7 @@ class MPNetReducedModel(MPNetReducedPreTrainedModel):
 
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = MPNetModel(self.config, **kwargs) if base_model is None else base_model
-        self.pooler = SBertPooler(self.config)
+        self.pooler = SentencePooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         
         
@@ -273,7 +272,7 @@ class MPNetReducedForSequenceClassification(MPNetReducedPreTrainedModel):
 
         kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.mpnet = MPNetModel(self.config, **kwargs) if base_model is None else base_model
-        self.pooler = SBertPooler(self.config)
+        self.pooler = SentencePooler(self.config)
         self.reduce = DimReduce(self.config) if reduce_module is None else reduce_module
         self.dropout = nn.Dropout(self.config.classifier_dropout)
         self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
