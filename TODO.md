@@ -1,16 +1,16 @@
 ## Organization
+* Switch SequenceClassifierOutput to ReducedSequenceClassifierOutput (?)
+* Tidy up reduced output classes
 * Separate the package into a separate git repo (?)
 
 ## SBERT Reduced
 * Try submitting the SBERT reduced model to GLUE
 
 ## BERT Reduced
+* The "glue" revision of the reduced BERT model is broken. May need to retrain ReducedBERT on GLUE tasks.
 * Fix the problems with the GLUE submission
 
 ## CompreSBERT
-* Add model to the AutoModel registration
-* Create a SequenceClassification version of the model
-* Finish training the model (how many epochs? 3?)
 * Test the model on the GLUE tasks
 * Test the model on clustering / topic modeling
 * Submit the model for GLUE tasks

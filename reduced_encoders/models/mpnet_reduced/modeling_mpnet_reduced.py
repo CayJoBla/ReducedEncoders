@@ -88,16 +88,6 @@ class MPNetCompressedForPretraining(MPNetReducedPreTrainedModel):
                 decoded_reduced_pooled_output = self.expand(reduced_pooled)
                 reconstruction_loss = mse_loss(pooled_output, decoded_reduced_pooled_output)  
 
-            # TODO: Figure out why I am getting NaN values 
-            if torch.isnan(contrastive_loss).any() or torch.isnan(reconstruction_loss).any():
-                print("\nNaN value in contrastive or reconstruction loss")
-                print("Pooled output:\n", pooled_output)
-                print("Reduced pooled output:\n", reduced_pooled)
-                print("Decoded reduced pooled output:\n", decoded_reduced_pooled_output)
-                print("Contrastive loss:\n", contrastive_loss)
-                print("Reconstruction loss:\n", reconstruction_loss)
-                raise ValueError("NaN value in contrastive or reconstruction loss. Be sure to use dataloader_drop_last=True in TrainingArguments to avoid singleton batches")
-
             # Compute total loss (w1 L1 + w2 L2 - 1/2 log(w1 w2))
             # We add a homoscedastic regularization term to help train the alpha and beta hyperparameters
             weighted_contrastive_loss = self.params.contrastive_weight * contrastive_loss

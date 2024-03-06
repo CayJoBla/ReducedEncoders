@@ -91,8 +91,6 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
         train_dataset=input_data["train"],
         eval_dataset=input_data["test"],
         tokenizer=tokenizer,
-        # extra_losses=list(extra_loss_index_mapping.keys()),
-        # compute_metrics=partial(compute_metrics, loss_index_mapping=extra_loss_index_mapping),
         extra_loss_index_mapping=model._get_extra_loss_index_mapping(),
         do_initial_eval=True,
     )
