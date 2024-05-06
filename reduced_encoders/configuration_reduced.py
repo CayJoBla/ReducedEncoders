@@ -5,7 +5,7 @@ from transformers import AutoConfig, PretrainedConfig
 class ReducedConfig(PretrainedConfig):
     """A mixin class for defining common parameters between reduced model configurations."""
 
-    def __init__(self, *args, reduction_sizes=(48,), **kwargs):
+    def __init__(self, *args, reduction_sizes=[512,256,128,68,48], **kwargs):
         super().__init__(*args, **kwargs)
         self.reduction_sizes = reduction_sizes
         self.reduced_size = reduction_sizes[-1]
