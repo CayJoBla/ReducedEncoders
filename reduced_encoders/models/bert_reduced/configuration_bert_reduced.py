@@ -1,6 +1,6 @@
 # configuration_bert_reduced.py
 
-from transformers import BertConfig, AutoConfig
+from transformers import BertConfig
 from ...configuration_reduced import ReducedConfig
 
 class BertReducedConfig(ReducedConfig, BertConfig):

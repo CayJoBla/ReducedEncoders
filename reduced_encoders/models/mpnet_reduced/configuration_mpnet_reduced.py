@@ -1,6 +1,6 @@
 # configuration_mpnet_reduced.py
 
-from transformers import MPNetConfig, AutoConfig
+from transformers import MPNetConfig
 from ...configuration_reduced import ReducedConfig
 
 class MPNetReducedConfig(ReducedConfig, MPNetConfig):
