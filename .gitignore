@@ -8,3 +8,4 @@ data/
 nohup.out
 sbert-base-uncased-reduced/
 all-mpnet-base-v2-reduced/
+all-mpnet-base-v2-compressed/
