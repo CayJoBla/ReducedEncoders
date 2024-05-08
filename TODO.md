@@ -13,7 +13,18 @@
 ## CompreSBERT
 * Test the model on the GLUE tasks
 * Test the model on clustering / topic modeling
+* Try clustering on other data
 * Submit the model for GLUE tasks
+
+## Compressed SBERT PUMAP model
+* Finish embedding the wikipedia dataset
+* Train the reduction / expansion layers with PUMAP
+* Test the model on language tasks
+* Test the model on clustering / topic modeling
+
+## Clustering algorithm
+* Explore ways to speed up online clustering with HDBSCAN
+* Look into other clustering algorithms (can they be done online?); DBSCAN, OPTICS, etc.
 
 ## Administrative
 * Look at starting the paper (reduction, topic modeling)
