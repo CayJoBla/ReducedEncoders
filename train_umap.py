@@ -95,6 +95,9 @@ def train(model="cayjobla/all-mpnet-base-v2-compressed", dataset_path="wikipedia
         train_size = 0.9 
     input_data = embedding_dataset.train_test_split(train_size=train_size, test_size=validation_size, seed=seed)
 
+    ## Downsample the data TODO: REMOVE THIS
+    input_data["train"] = input_data["train"].select(range(3000000))
+
     ## Begin training the model
     if verbose: logger.debug("Training the reduction using ParametricUMAP...")
 
@@ -111,7 +114,7 @@ def train(model="cayjobla/all-mpnet-base-v2-compressed", dataset_path="wikipedia
         lr=learning_rate,
         epochs=num_epochs,
         batch_size=batch_size,
-        num_workers=1,
+        num_workers=127,
         num_gpus=1,
         match_nonparametric_umap=False,
     )
