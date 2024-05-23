@@ -1,7 +1,7 @@
 # train_compressed.py
 
 from transformers import set_seed, AutoTokenizer, DataCollatorWithPadding, TrainingArguments, Trainer, TrainerCallback
-from reduced_encoders import MPNetCompressedForPretraining
+from reduced_encoders import MPNetCompressedForPreTraining
 from datasets import load_dataset
 from datasets.utils.logging import disable_progress_bar
 import argparse
@@ -20,7 +20,7 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
     ## Load model
     model_name = model or "cayjobla/all-mpnet-base-v2-compressed"
     if verbose: print(f"Loading {model_name} model...")
-    model = MPNetCompressedForPretraining.from_pretrained(
+    model = MPNetCompressedForPreTraining.from_pretrained(
                 model_name, 
                 revision=revision,
                 do_contrast=do_contrast,
