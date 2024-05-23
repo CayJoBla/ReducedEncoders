@@ -3,82 +3,125 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 from transformers.utils import ModelOutput
 
+# TODO: Update the Reduced models to use these new outputs
 @dataclass
-class ReducedModelOutput(ModelOutput):
+class BaseReducedModelOutput(ModelOutput):
     """
-    Base class for reduced model's outputs, with potential hidden states and attentions.
-    Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
-
-        Other args from transformers.modeling_outputs.BaseModelOutput
-    """
-    last_hidden_state: torch.FloatTensor = None
-    unreduced_last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-@dataclass
-class ReducedModelOutputWithPooling(ModelOutput):
-    """
-    Base class for reduced model's outputs that also contains a reduced pooling of the last hidden states.
+    Base class for reduced model outputs.
 
     Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
-        reduced_pooler_output (`torch.FloatTensor` of shape `(batch_size, reduced_size)`):
-            Pooled reduced dimensionality hidden-state resulting from reducing the dimensionality of the 
-            pooler output of the model at the output of the last layer.
-            
-        Other args from transformers.modeling_outputs.BaseModelOutputWithPooling
+        last_reduced_hidden_state (torch.FloatTensor):
+            The reduced dimensionality hidden states at the output of the last layer of the model.
+        last_full_hidden_state (torch.FloatTensor):
+            The hidden states at the output of the last layer of the base encoder model.
+        reduced_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to the intermediate reduced hidden states of the model at 
+            the output of each reduction layer.
+        full_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to hidden states of the model at the output of each encoder
+            layer plus the optional initial embedding outputs.
+        attentions (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors of attentions weights after the attention softmax, used to compute the 
+            weighted average in the self-attention heads.
     """
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    unreduced_last_hidden_state: torch.FloatTensor = None
-    unreduced_pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_reduced_hidden_state: torch.FloatTensor = None
+    last_full_hidden_state: torch.FloatTensor = None
+    reduced_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    full_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 
 @dataclass
-class ReducedModelOutputWithPoolingAndCrossAttentions(ModelOutput):
+class BaseReducedModelOutputWithPooling(ModelOutput):
     """
-    Base class for reduced model's outputs, with potential hidden states and attentions.
+    Base class for reduced model outputs with pooling.
+
     Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
-        reduced_pooler_output (`torch.FloatTensor` of shape `(batch_size, reduced_size)`):
-            Pooled reduced dimensionality hidden-state resulting from reducing the dimensionality of the 
-            pooler output of the model at the output of the last layer.
-            
-        Other args from transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions
+        last_reduced_hidden_state (torch.FloatTensor):
+            The reduced dimensionality hidden states at the output of the last layer of the model.
+        last_full_hidden_state (torch.FloatTensor):
+            The hidden states at the output of the last layer of the base encoder model.
+        reduced_pooler_output (torch.FloatTensor):
+            A reduced-dimensionality hidden state pooled from the last_reduced_hidden_state sequence
+        full_pooler_output (torch.FloatTensor):
+            A hidden state pooled from the last_full_hidden_state sequence
+        reduced_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to the intermediate reduced hidden states of the model at 
+            the output of each reduction layer.
+        full_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to hidden states of the model at the output of each encoder
+            layer plus the optional initial embedding outputs.
+        attentions (tuple(torch.FloatTensor), *optional*):
+            See the documentation in `transformers.modeling_outputs.BaseModelOutput`
     """
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    unreduced_last_hidden_state: torch.FloatTensor = None
-    unreduced_pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_reduced_hidden_state: torch.FloatTensor = None
+    last_full_hidden_state: torch.FloatTensor = None
+    reduced_pooler_output: torch.FloatTensor = None
+    full_pooler_output: torch.FloatTensor = None
+    reduced_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    full_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 
 @dataclass
-class CompressedModelForPreTrainingOutput(ModelOutput):
+class BaseReducedModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     """
-    Ouput type of ['MPNetCompressedForPretraining']
+    Base class for reduced model outputs with pooling and cross-attentions.
 
     Args:
-        loss (torch.FloatTensor): Linear combination of the contrastive learning and the reconstruction loss. The contrastive 
-            learning loss is the MSE between the cosine similarity of data pairs in the original and reduced embeddings. 
-            The reconstruction loss is the MSE between the original and decoded reduced embeddings.
-        hidden_states (tuple(torch.FloatTensor)): Hidden-states of the model at the output of each layer
-        attentions (tuple(torch.FloatTensor)): Attentions weights after the attention softmax, used to compute the weighted 
-            average in the self-attention heads.
+        last_reduced_hidden_state (torch.FloatTensor):
+            The reduced dimensionality hidden states at the output of the last layer of the model.
+        last_full_hidden_state (torch.FloatTensor):
+            The hidden states at the output of the last layer of the base encoder model.
+        reduced_pooler_output (torch.FloatTensor):
+            A reduced-dimensionality hidden state pooled from the last_reduced_hidden_state sequence
+        full_pooler_output (torch.FloatTensor):
+            A hidden state pooled from the last_full_hidden_state sequence
+        reduced_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to the intermediate reduced hidden states of the model at 
+            the output of each reduction layer.
+        full_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to hidden states of the model at the output of each encoder
+            layer plus the optional initial embedding outputs.
+        attentions (tuple(torch.FloatTensor), *optional*):
+            See the documentation in `transformers.modeling_outputs.BaseModelOutput`
+        cross_attentions (tuple(torch.FloatTensor), *optional*):
+            See the documentation in `transformers.modeling_outputs.BaseModelOutputWithCrossAttentions`
+        past_key_values (tuple(tuple(torch.FloatTensor)), *optional*):
+            See the documentation in `transformers.modeling_outputs.BaseModelOutputWithPast`
     """
-    loss: torch.FloatTensor = None
-    contrastive_loss: torch.FloatTensor = None
-    reconstruction_loss: torch.FloatTensor = None
-    pooled_output: torch.FloatTensor = None
-    reduced_pooled_output: torch.FloatTensor = None
-    reconstructed_pooled_output: torch.FloatTensor = None
-    
+    last_reduced_hidden_state: torch.FloatTensor = None
+    last_full_hidden_state: torch.FloatTensor = None
+    reduced_pooler_output: torch.FloatTensor = None
+    full_pooler_output: torch.FloatTensor = None
+    reduced_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    full_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+class ReducedSequenceClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sentence classification models with dimensionality reduction.
+
+    Args:
+        loss (torch.FloatTensor, *optional*):
+            See the documentation in `transformers.modeling_outputs.SequenceClassifierOutput`
+        logits (torch.FloatTensor):
+            See the documentation in `transformers.modeling_outputs.SequenceClassifierOutput`
+        reduced_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to the intermediate reduced hidden states of the model at 
+            the output of each reduction layer.
+        full_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to hidden states of the model at the output of each encoder
+            layer plus the optional initial embedding outputs.
+        attentions (tuple(torch.FloatTensor), *optional*):
+            See the documentation in `transformers.modeling_outputs.SequenceClassifierOutput`
+    """
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    reduced_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    full_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None

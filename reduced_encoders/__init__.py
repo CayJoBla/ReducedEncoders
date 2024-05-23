@@ -8,8 +8,8 @@ from .models import (
     MPNetReducedPreTrainedModel,
     MPNetReducedModel,
     MPNetReducedForSequenceClassification,
-    MPNetCompressedForPretraining,
     MPNetCompressedModel,
+    MPNetCompressedForPreTraining,
     MPNetCompressedForSequenceClassification
 )
 from .modeling_reduced import (

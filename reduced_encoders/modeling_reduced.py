@@ -3,92 +3,95 @@
 from torch import nn
 from collections import OrderedDict
 from transformers import PreTrainedModel, AutoConfig, PretrainedConfig, AutoModel
-from transformers.activations import ACT2FN
+from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 import warnings
+
+from .modeling_utils import get_activation
 
 
 class DimReshape(nn.Module):
     """Layer that changes the dimensionality of the hidden space / embeddings.
-    Currently used in both the DimReduce and DimReconstruct modules.
-    Includes a linear layer, an activation function, and a dropout layer.
+    Currently used in both the DimReduce and DimExpand modules.
+    Note that the LayerNorm, activation function, and Dropout layers are 
+    applied before the dense layer.
+
+    Parameters:
+        input_size (int): Size of the hidden state inputs.
+        output_size (int): Size of the hidden state outputs.
+        config (ReducedConfig): Reduced model configuration.
     """
     def __init__(self, input_size, output_size, config):
         super().__init__()
-        self.linear = nn.Linear(input_size, output_size)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.layernorm = nn.LayerNorm(input_size, eps=config.layer_norm_eps)
+        self.activation = get_activation(config.hidden_act)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dense = nn.Linear(input_size, output_size)
         
     def forward(self, x):
-        output = self.linear(x)
+        output = self.layernorm(x)
         output = self.activation(output)
         output = self.dropout(output)
-        return output
+        embedding = self.dense(output)
+        return embedding      
 
 
 class DimReduce(nn.Sequential):
-    """
-    Module to insert between the base transformer model and the model head in order to reduce 
-    the dimensionality of the hidden states. Uses the hidden_activation parameter, the 
-    hidden_size parameter, and the custom reduction_sizes parameter from the base model 
-    configuration.
+    """Module to insert after the base encoder model in order to reduce the dimensionality 
+    of the hidden states. Utilizes the 'hidden_size', 'hidden_act', 'hidden_dropout_prob', 
+    'layer_norm_eps', 'reduction_sizes', and 'reduced_size' parameters from the model 
+    configuration to determine the structure of the reduction layers.
 
-    Args:
-        config (PretrainedConfig): Configuration for the base model. Should include the hidden_size
-            and reduction_sizes parameters for the dimensions of each layer of this module.
-        modules (OrderedDict): An optional ordered dictionary of modules to load the reduction
-            layers from. If not specified, the reduction layers will be randomly initialized, 
-            using the sizes from the reduction_sizes parameter in the configuration.
+    Parameters:
+        config (ReducedConfig): Reduced model configuration with the above parameters.
     """
-    def __init__(self, config, modules=None):
+    def __init__(self, config):     # TODO: Should I worry about how the weights are initialized here
         input_size = config.hidden_size
-        self.reduction_sizes = config.reduction_sizes
-        DimReduceLayer = DimReshape     # Pick the layer type to use for the reduction layers
-        
-        if modules is None:
-            modules = OrderedDict()
-            for i, reduction_size in enumerate(self.reduction_sizes):   
-                modules[str(i)] = DimReduceLayer(input_size, reduction_size, config)
-                input_size = reduction_size
-        elif not isinstance(modules, OrderedDict):
-            modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
+        reduction_sizes = config.reduction_sizes
+
+        reduction_layers = []
+        for reduction_size in reduction_sizes:
+            reduction_layers.append(DimReshape(input_size, reduction_size, config))
+            input_size = reduction_size
+        super().__init__(*reduction_layers)
     
-        super().__init__(modules)
+    def forward(self, x): 
+        embeddings = (x,)
+        for layer in self:
+            embeddings += (layer(embeddings[-1]),)
+        return embeddings[1:]
 
 
 class DimExpand(nn.Sequential):
-    """A module used during pretraining of a compressed model that transforms the 
-    reduced embeddings back into full-size model embeddings with the goal of matching 
-    the original embeddings as closely as possible.
+    """Module to insert after the reduction module in order to reconstruct the full size 
+    hidden states from the reduced hidden states. Generally used for pretraining the 
+    reduction module with a reconstruction loss.
+    Utilizes the 'hidden_size', 'hidden_act', 'hidden_dropout_prob', 'layer_norm_eps', 
+    'reduction_sizes', and 'reduced_size' parameters from the model configuration to 
+    determine the structure of the reduction layers.
 
     The structure of the model closely follows that of the DimReduce module, but reverses
     the order of the reduction_sizes parameter for the intermediate layer sizes to go from
     smallest to largest instead of largest to smallest.
 
-    Args:
-        config (PretrainedConfig): Configuration for the base model. Should include the hidden_size
-            and reduction_sizes parameters for the dimensions of each layer of this module.
-        modules (OrderedDict): An optional ordered dictionary of modules to load the expansion
-            layers from. If not specified, the expansion layers will be randomly initialized, 
-            using the sizes from the reduction_sizes parameter in the configuration.
+    Parameters:
+        config (ReducedConfig): Reduced model configuration with the above parameters.
     """
-    def __init__(self, config, modules=None):
+    def __init__(self, config):
         input_size = config.reduced_size
-        self.expansion_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
-        DimExpandLayer = DimReshape    # Pick the layer type to use for the expansion layers
-        
-        if modules is None:
-            modules = OrderedDict()
-            for i, decoding_size in enumerate(self.expansion_sizes):   
-                modules[str(i)] = DimExpandLayer(input_size, decoding_size, config)
-                input_size = decoding_size
-        elif not isinstance(modules, OrderedDict):
-            modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
-    
-        super().__init__(modules)
+        expansion_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
 
+        expansion_layers = []
+        for expansion_size in expansion_sizes:
+            expansion_layers.append(DimReshape(input_size, expansion_size, config))
+            input_size = expansion_size
+        super().__init__(*expansion_layers)
+    
+    def forward(self, x): 
+        embeddings = (x,)
+        for layer in self:
+            embeddings += (layer(embeddings[-1]),)
+        return embeddings[1:]
+    
 
 class DimReduceLoader(PreTrainedModel):
     """A wrapper for the DimReduce module to load the pretrained reduction weights from a 

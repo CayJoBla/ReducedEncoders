@@ -2,7 +2,7 @@ from .modeling_mpnet_reduced import (
     MPNetReducedPreTrainedModel,
     MPNetReducedModel,
     MPNetReducedForSequenceClassification,
-    MPNetCompressedForPretraining,
+    MPNetCompressedForPreTraining,
     MPNetCompressedModel,
     MPNetCompressedForSequenceClassification
 )

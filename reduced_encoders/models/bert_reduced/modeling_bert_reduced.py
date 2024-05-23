@@ -2,14 +2,17 @@
 
 import torch
 from torch import nn
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, SequenceClassifierOutput
-from transformers.models.bert.modeling_bert import BertPreTrainingHeads, BertForPreTrainingOutput
-from transformers.activations import ACT2FN
-from transformers import BertModel
+from transformers.models.bert.modeling_bert import BertPreTrainingHeads, BertModel
+from transformers.utils import ModelOutput
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 from ...modeling_reduced import ReducedPreTrainedModel, DimReduce
-from ...modeling_outputs import ReducedModelOutputWithPoolingAndCrossAttentions
-from ...modeling_utils import sequence_classification_loss
+from ...modeling_utils import get_activation, SequenceClassificationLoss
+from ...modeling_outputs import (
+    BaseReducedModelOutputWithPoolingAndCrossAttentions, 
+    ReducedSequenceClassifierOutput,
+)
 from .configuration_bert_reduced import BertReducedConfig
 
 
@@ -45,10 +48,7 @@ class BertReducedPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.reduced_size, config.reduced_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
+        self.transform_act_fn = get_activation(config.hidden_act)
         self.LayerNorm = nn.LayerNorm(config.reduced_size, eps=config.layer_norm_eps)
     
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -56,6 +56,35 @@ class BertReducedPredictionHeadTransform(nn.Module):
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
+
+
+@dataclass
+class BertReducedForPreTrainingOutput(ModelOutput):
+    """
+    Output type of [`BertReducedForPreTraining`].
+
+    Args:
+        loss (torch.FloatTensor, *optional*):
+            See the documentation in `transformers.models.bert.modeling_bert.BertForPreTrainingOutput`.
+        prediction_logits (torch.FloatTensor):
+            See the documentation in `transformers.models.bert.modeling_bert.BertForPreTrainingOutput`.
+        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+            See the documentation in `transformers.models.bert.modeling_bert.BertForPreTrainingOutput`.
+        reduced_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to the intermediate reduced hidden states of the model at 
+            the output of each reduction layer.
+        full_hidden_states (tuple(torch.FloatTensor), *optional*):
+            Tuple of tensors corresponding to hidden states of the model at the output of each encoder
+            layer plus the optional initial embedding outputs.
+        attentions (tuple(torch.FloatTensor), *optional*):
+            See the documentation in `transformers.models.bert.modeling_bert.BertForPreTrainingOutput`.
+    """
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
+    reduced_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    full_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class BertReducedModel(BertReducedPreTrainedModel):
@@ -74,14 +103,12 @@ class BertReducedModel(BertReducedPreTrainedModel):
 
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
-
-        self.post_init()
     
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 
                 output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        full_outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -92,22 +119,31 @@ class BertReducedModel(BertReducedPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        full_sequence_output, full_pooled_output = full_outputs[:2]
 
-        sequence_output, pooled_output = outputs[:2]
-        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output)
+        reduced_sequence_hidden_states = self.reduce(full_sequence_output)
+        reduced_sequence_output = reduced_sequence_hidden_states[-1]
+        reduced_pooled_hidden_states = self.reduce(full_pooled_output)
+        reduced_pooled_output = reduced_pooled_hidden_states[-1]
+
+        reduced_hidden_states = (reduced_sequence_hidden_states, reduced_pooled_hidden_states) if output_hidden_states else None
 
         if not return_dict:
-            return (reduced_seq, reduced_pooled) + outputs[2:]
+            outputs = (reduced_sequence_output, full_sequence_output, reduced_pooled_output, full_pooled_output)
+            if output_hidden_states:
+                outputs += (reduced_hidden_states,)
+            return outputs + full_outputs[2:]
 
-        return ReducedModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=reduced_seq,
-            pooler_output=reduced_pooled,
-            unreduced_last_hidden_state=sequence_output,
-            unreduced_pooler_output=pooled_output,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
+        return BaseReducedModelOutputWithPoolingAndCrossAttentions(
+            last_reduced_hidden_state=reduced_sequence_output,
+            last_full_hidden_state=full_sequence_output,
+            reduced_pooler_output=reduced_pooled_output,
+            full_pooler_output=full_pooled_output,
+            reduced_hidden_states=reduced_hidden_states,
+            full_hidden_states=full_outputs.hidden_states,
+            past_key_values=full_outputs.past_key_values,
+            attentions=full_outputs.attentions,
+            cross_attentions=full_outputs.cross_attentions,
         )
 
 
@@ -127,6 +163,8 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
 
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.layernorm = nn.LayerNorm(self.config.reduced_size, eps=self.config.layer_norm_eps)
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
         self.cls = BertReducedPreTrainingHeads(self.config)
 
         self.post_init()
@@ -135,7 +173,7 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
                 labels=None, next_sentence_label=None, output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bert(
+        full_outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -146,10 +184,18 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        full_sequence_output, full_pooled_output = full_outputs[:2]
 
-        sequence_output, pooled_output = outputs[:2]
-        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output)
-        prediction_scores, seq_relationship_score = self.cls(reduced_seq, reduced_pooled)
+        reduced_sequence_hidden_states = self.reduce(full_sequence_output)
+        reduced_sequence_output = reduced_sequence_hidden_states[-1]
+        reduced_pooled_hidden_states = self.reduce(full_pooled_output)
+        reduced_pooled_output = reduced_pooled_hidden_states[-1]
+
+        reduced_hidden_states = (reduced_sequence_hidden_states, reduced_pooled_hidden_states) if output_hidden_states else None
+
+        sequence_output = self.dropout(self.layernorm(reduced_sequence_output)) # Add layer norm and dropout for non-linearity
+        pooled_output = self.dropout(self.layernorm(reduced_pooled_output))     
+        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
         if labels is not None and next_sentence_label is not None:
@@ -159,15 +205,19 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
             total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
-            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            output = (prediction_scores, seq_relationship_score) 
+            if output_hidden_states:
+                output += (reduced_sequence_hidden_states, reduced_pooled_hidden_states)
+            output += full_outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return BertForPreTrainingOutput(
+        return BertReducedForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            reduced_hidden_states=reduced_hidden_states,
+            full_hidden_states=full_outputs.hidden_states,
+            attentions=full_outputs.attentions,
         )
 
 
@@ -193,17 +243,18 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
         
         self.bert = base_model if base_model is not None else BertModel(self.config)
         self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.layernorm = nn.LayerNorm(self.config.reduced_size, eps=self.config.layer_norm_eps)
         self.dropout = nn.Dropout(self.config.classifier_dropout)
         self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
+        self.seq_class_loss = SequenceClassificationLoss(self.config)
         
         self.post_init()
-
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 labels=None, output_attentions=None, output_hidden_states=None, return_dict=None):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        outputs = self.bert(
+
+        full_outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -214,22 +265,26 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        full_pooled_output = full_outputs[1]
 
-        pooler_output = outputs[1]
-        reduced_output = self.reduce(pooler_output)
-        reduced_output = self.dropout(reduced_output)
-        logits = self.classifier(reduced_output)
+        reduced_pooled_hidden_states = self.reduce(full_pooled_output)
+        reduced_pooled_output = reduced_pooled_hidden_states[-1]
 
-        loss = sequence_classification_loss(logits, labels, self.config) if labels is not None else None
+        pooled_output = self.dropout(self.layernorm(reduced_pooled_output)) # Add layer norm and dropout for non-linearity
+        logits = self.classifier(pooled_output)
+        loss = self.seq_class_loss(logits, labels) if labels is not None else None
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            output = (loss, logits) if loss is not None else (logits,)
+            if output_hidden_states:
+                output += (reduced_pooled_hidden_states,)
+            return output + full_outputs[2:]
 
-        return SequenceClassifierOutput(
+        return ReducedSequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            reduced_hidden_states=reduced_pooled_hidden_states if output_hidden_states else None,
+            full_hidden_states=full_outputs.hidden_states,
+            attentions=full_outputs.attentions,
         )
 
