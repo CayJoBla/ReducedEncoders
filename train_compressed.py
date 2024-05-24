@@ -25,7 +25,7 @@ def train(model=None, dataset_path=None, dataset_name=None, split="train", token
                 revision=revision,
                 do_contrast=do_contrast,
                 do_reconstruction=do_reconstruction,
-                )
+            )
 
     ## Load tokenizer
     if tokenizer is None: tokenizer = model_name

@@ -157,14 +157,12 @@ class MPNetCompressedForPreTraining(MPNetReducedPreTrainedModel):
         self.reduce = reduce_module or DimReduce(self.config)
         self.expand = DimExpand(self.config) if do_reconstruction else None
         
-        # Set up the loss weight parameters (only if both losses are enabled)
-        params = {}
-        if do_contrast and do_reconstruction:
-            params = {
-                'contrastive_weight': nn.Parameter(torch.tensor(1.)),
-                'reconstruction_weight': nn.Parameter(torch.tensor(1.)),
-            }
-        self.params = nn.ParameterDict(params)
+        # Set up the loss weight parameters (only train if both losses are enabled)
+        train_params = (do_contrast and do_reconstruction)
+        self.params = nn.ParameterDict({
+            'contrastive_weight': nn.Parameter(torch.tensor(1.), requires_grad=train_params),
+            'reconstruction_weight': nn.Parameter(torch.tensor(1.), requires_grad=train_params),
+        })
 
     def get_extra_logging_dict(self):
         """Returns a dictionary of extra parameters to log during training."""

@@ -87,7 +87,7 @@ class CustomTrainer(Trainer):
         else:
             return super().compute_loss(model, inputs, return_outputs=return_outputs)
 
-    def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
+    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
         """ adapted from Trainer._maybe_log_save_evaluate to support logging extra losses
         """
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
@@ -103,6 +103,8 @@ class CustomTrainer(Trainer):
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            if grad_norm is not None:
+                logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
 
             if hasattr(self.control, 'extra_losses'):
                 for k, v in self.control.extra_losses.items():
