@@ -102,7 +102,7 @@ class MPNetCompressedModel(MPNetReducedPreTrainedModel):
         self.mpnet = base_model or MPNetModel(self.config, **kwargs)
         self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
-        self.expand = DimExpand(self.config)    # Not needed, but included if we want to use it later 
+        # self.expand = DimExpand(self.config)    # Not needed, but included if we want to use it later 
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, 
                 inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None):
