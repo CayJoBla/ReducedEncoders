@@ -17,6 +17,6 @@ python train_compressed.py \
     --num_epochs 3 \
     --logging_steps 2500 \
     --output_dir "all-mpnet-base-v2-compressed" \
-    --run_name "train-wikipedia-variable" \
+    --run_name "train-wikipedia-variable-no-norm" \
     --disable_tqdm \
     -v \

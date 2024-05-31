@@ -22,14 +22,14 @@ class DimReshape(nn.Module):
     """
     def __init__(self, input_size, output_size, config):
         super().__init__()
-        self.layernorm = nn.LayerNorm(input_size, eps=config.layer_norm_eps)
+        # self.layernorm = nn.LayerNorm(input_size, eps=config.layer_norm_eps)
         self.activation = get_activation(config.hidden_act)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.dense = nn.Linear(input_size, output_size)
         
     def forward(self, x):
-        output = self.layernorm(x)
-        output = self.activation(output)
+        # x = self.layernorm(x)
+        output = self.activation(x)
         output = self.dropout(output)
         embedding = self.dense(output)
         return embedding      
