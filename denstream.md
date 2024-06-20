@@ -1,4 +1,13 @@
-# <center> DenStream </center>
+---
+title: "DenStream Overview"
+author: "Cayden Blake"
+# header-includes:
+#    - \usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+output:
+    pdf_document
+---
+
+# <center>DenStream Overview</center>
 
 My reference for this document is [this paper](https://www.researchgate.net/publication/220906738_Density-Based_Clustering_over_an_Evolving_Data_Stream_with_Noise), which introduces the algorithm. Furthermore, I look at the [documentation](https://riverml.xyz/dev/api/cluster/DenStream/) of the River implementation. 
 
@@ -9,19 +18,19 @@ The purpose of this document is to summarize the DenStream algorithm and to disc
 - What limitations does DenStream have with respect to our research context (i.e. spatial complexity, difficulty in high-dimensional data, etc.)?
 - How does DenStream compare to other clustering algorithms?
 
-## Overview
-DenStream is a clustering algorithm that is designed to work with data streams. It is able to discover clusters with arbitrary shapes and sizes, and is able to handle noise points. The algorithm is based on the idea of microclusters, which are small clusters that are created from the data stream. These microclusters are then used to create larger clusters, which are the final clusters that are output by the algorithm.
+## TLDR
+DenStream is a clustering algorithm that is designed to work with data streams. It is able to discover clusters with arbitrary shapes and sizes, and is able to handle noise points. The algorithm is divided into online and offline parts. For the online part, the algorithm uses an idea of micro-clusters which can be updated as new points arrive from the data stream. For the offline part of the algorithm, a variant of DBSCAN is used to extract final clusters, which are formed by grouping together density-connected micro-clusters. The algorithm also has a built in mechanism for phasing out old micro-clusters or data points as time goes on and accounting for drift in micro-clusters. Though there are some limitations to the algorithm for our use case, it seems like it could be a good fit.
 
-The DenStream algorithm makes use of multiple parameters, including:
+## The Algorithm
+The DenStream algorithm is divided into two main parts: online and offline. The online part is responsible for maintaining the micro-clusters as new data points arrive, while the offline part is responsible for extracting the final clusters from the micro-clusters when the user requests them.
+
+### Parameters
 - `lambda`: The decaying factor. Determines the importance of historical data to current cluster. The higher the value of $\lambda$, the lower importance of the historical data compared to more recent data.
 - `mu`: Parameter to determine the minimum weight of a micro-cluster to be considered a core micro-cluster. Since $\beta \mu > 1$, $\mu \in (\frac{1}{\beta}, \infty)$.
 - `beta`: Parameter to determine the fraction of the weight limit, $\mu$, that a micro-cluster must have to be considered a potential core micro-cluster. $\beta \in (0,1)$.
 - `epsilon`: Defines the neighborhood around a micro-cluster. The radius of any micro-cluster must be less than or equal to $\epsilon$.
 - `n_samples_init`: The number of samples to use for initializing the algorithm and the micro-clusters.
 - `v`: The rate of the data stream, or the number of data points per time unit.
-
-## The Algorithm
-The DenStream algorithm is divided into two main parts: online and offline. The online part is responsible for maintaining the micro-clusters as new data points arrive, while the offline part is responsible for extracting the final clusters from the micro-clusters when the user requests them.
 
 ### Definitions
 Core-Micro-Cluster (`c-micro-cluster`)
@@ -52,7 +61,7 @@ Density-Connected
 
 ### Online (Micro-Cluster Maintenance)
 
-#### Merging($p$, $\epsilon$, $\beta$, $\mu$)
+#### `Merging`($p$, $\epsilon$, $\beta$, $\mu$)
 Merge a point $p$ into the closest p-micro-cluster or o-micro-cluster. If the point is not within $\epsilon$ of any existing micro-cluster, create a new o-micro-cluster.
 1. **Try merging into a p-micro-cluster**
     - Find the closest p-micro-cluster $c_p$ to $p$
@@ -67,7 +76,7 @@ Merge a point $p$ into the closest p-micro-cluster or o-micro-cluster. If the po
 3. **Else: Create a new o-micro-cluster**
     - Create a new o-micro-cluster $c_o$ with $p$ as the only point
 
-#### Pruning($t$, $\beta$, $\mu$)
+#### `Pruning`($t$, $\beta$, $\mu$)
 Check the weights of all p-micro-clusters and o-micro-clusters to see if they have decayed. If the weight of a p-micro-cluster is less than $\beta\mu$, remove it. If the weight of an o-micro-cluster is less than the lower weight limit, remove it. In general, this is run every $T_p$ time units, where 
 $$T_p = \left\lceil \frac{1}{\lambda} \log{\left(\frac{\beta\mu}{\beta\mu-1}\right)} \right\rceil.$$
 1. **Check p-micro-clusters**
@@ -82,8 +91,17 @@ $$T_p = \left\lceil \frac{1}{\lambda} \log{\left(\frac{\beta\mu}{\beta\mu-1}\rig
 
 ### Offline (Cluster Extraction)
 
-#### DBSCAN($\epsilon$, $\mu$)
+#### `DBSCAN`($\epsilon$, $\mu$)
 Run a variant of DBSCAN on the p-micro-clusters to extract the final clusters. All the density-connected p-micro-clusters are grouped together to form a cluster.
 
-
 ## Limitations / Potential Issues
+- **High Dimensionality**: The algorithm is not specifically designed to handle high-dimensional data. Though the paper talks about the scalability of the algorithm, they do not test past 40 dimensions. Luckily, our embeddings are fairly close (48 dimensions), so this may not be a big issue, but if we need to scale up to higher dimensions, this could be a problem.
+- **Spatial Complexity**: Though the algorithm tests execution time on a variety of dimensions and it tests memory usage, it does not do these tests together, so it is unclear how the spatial complexity of the algorithm scales with respect to the dimensionality of the data. That said, the memory usage seems to be fairly constant with stream length, so this may not be a problem with increasing time. Upon further inspection, the algorithm seems to suggest that each micro-cluster does not need to save individual points, so the increase in spatial complexity should be linear with respect to dimensionality.
+- **Number of Parameters**: The algorithm has a number of parameters that need to be set, and though the paper does some evaluation on the effect of the $\gamma$ and $\beta$ parameters, it does not do a full analysis of the effect of all parameters on the algorithm. Furthermore, hyperparameter tuning on unsupervised learning algorithms can be difficult, so it may take some work to get the algorithm to work well with our data.
+- **Not Completely Online**: The algorithm has an offline component that is used to extract the final clusters from the p-micro-clusters. This could be a problem if we need to have real-time clustering, but it may not be a big issue. If we need to do real-time clustering, we would probably just do prediction with the previous clusters and the new data point, rather than re-running the algorithm every time a new data point comes in. We may want to look into the execution times for computing the final clusters with a full stream of data to determine how often we can run the offline component.
+
+Despite these potential issues, the algorithm has a lot of potential benefits within our use context, and it seems like it could be a good fit for our research.
+
+***Note***:  We may want to use the [DBStream algorithm](https://ieeexplore.ieee.org/document/7393836) instead. It is similar, but it is much newer and has some improvements over DenStream.
+
+After looking over the DBStream paper, it does not look like it will be good for our applications as a big part of the algorithm requires finding the overlapping volumes of hyperspheres, which is incredibly difficult in our 48-dimensional space. DenStream seems like it will be a better fit for our research.
