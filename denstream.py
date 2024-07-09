@@ -1,17 +1,15 @@
-from __future__ import annotations
-
 import copy
 import math
-from abc import ABCMeta
-from collections import defaultdict, deque, UserDict
+from collections import deque
 from typing import List
 import numpy as np
-
-from river import base, utils
+from scipy.spatial.distance import cdist, pdist
+from scipy.sparse import csr_matrix, csgraph
+import networkx as nx
 
 # TODO: What of this algorithm is parallelizable?
 
-class DenStream(base.Clusterer):
+class DenStream:
     """My custom implementation of the DenStream algorithm. Adapted from the 
     river library's implementation.
 
@@ -27,12 +25,26 @@ class DenStream(base.Clusterer):
         not part of the river implementation, it is also not included in 
         this implementation, due to the high-dimensional nature of our use
         case.
-    I am considering the following change, though I am on the fence:
       - In the paper, when p-micro-clusters fall below the threshold weight
-        value, they are deleted. In this implementation, they are instead
-        converted into o-micro-clusters. This avoids an issue where rising 
-        o-micro-clusters could become p-micro-clusters and then be deleted
-        as soon as the timestep advanced and the decay factor was applied.
+        value, they are deleted. In this implementation, an attempt is first 
+        made to save that information if possible, either by merging with a 
+        nearby micro-cluster or turning it into an o-micro-cluster. This avoids 
+        an issue where rising o-micro-clusters could become p-micro-clusters 
+        and then be deleted as soon as the timestep advanced and the decay 
+        factor was applied.
+      - Option for blind initialization, where the algorithm will not perform
+        the initial DBSCAN clustering on the first n_samples_init samples. 
+        Instead, it just begins with an empty set of micro-clusters, adding 
+        points to o-micro-clusters until they become p-micro-clusters. Note 
+        that not using blind initialization may add some speedup to the initial
+        clustering, but can result in p-micro-clusters that do not satisfy the
+        radius condition.
+    Some changes that would be nice, but may not be possible:
+      - Batched processing of points, to speed up the algorithm. This would
+        be especially helpful for our use case, where we are getting points
+        from our encoder model in batches as well. Unfortunately, this does 
+        not seem very possible under the current model. It may be possible to 
+        look into adaptations of the algorithm that allow for batch processing.
     """
     def __init__(
         self,
@@ -42,6 +54,7 @@ class DenStream(base.Clusterer):
         epsilon: float = 0.02,
         n_samples_init: int = 1000,
         stream_speed: int = 100,
+        blind_init: bool = False,
     ):
         super().__init__()
         self.timestamp = 0
@@ -62,9 +75,10 @@ class DenStream(base.Clusterer):
         self._time_period = math.ceil(
             math.log(beta_mu / (beta_mu - 1)) / self.decaying_factor
         )
-        self._init_buffer: list = []
+        if not blind_init:
+            self._init_buffer: list = []
+        self.initialized = blind_init
         self._n_samples_seen = 0
-        self.initialized = False
 
         # Check that the value of beta is within the range (0,1]
         if not (0 < self.beta <= 1):
@@ -81,15 +95,11 @@ class DenStream(base.Clusterer):
     def centers(self):
         return self._get_cluster_centers(self.clusters)
 
-    @staticmethod
-    def _distance(a, b):
-        return np.linalg.norm(a - b, axis=-1)
-
     def _get_cluster_centers(self, clusters):
-        return np.array([c.calc_center(self.timestamp) for c in clusters])
+        return np.array([c.calc_center(self.timestamp) for c in clusters], dtype=float)
 
     def _get_core_clusters(self, clusters):
-        return [c for c in clusters if c.calc_weight(self.timestamp) > self.mu]
+        return np.array([c for c in clusters if c.calc_weight(self.timestamp) > self.mu], dtype=object)
 
     def _get_closest_cluster_idx(self, X, clusters, max_dist=np.inf):
         """Get the index of the closest cluster to each point in X. 
@@ -99,7 +109,7 @@ class DenStream(base.Clusterer):
         X = np.atleast_2d(X)
         num_points = X.shape[0]
         if len(clusters) == 0:
-            return np.fill(num_points, -1)
+            return np.full(num_points, -1)
         centers = self._get_cluster_centers(clusters)
         distances = cdist(X, centers)
         idx = np.argmin(distances, axis=-1)
@@ -144,12 +154,12 @@ class DenStream(base.Clusterer):
                 return
         
         # Create a new o-micro-cluster (x was not merged into any existing cluster)
-        mc_from_p = DenStreamMicroCluster(
+        omc = DenStreamMicroCluster(
             x,
             self.timestamp,
             self.decaying_factor,
         )
-        self.o_micro_clusters.append(mc_from_p)
+        self.o_micro_clusters.append(omc)
 
     # def _is_directly_density_reachable(self, c_p, c_q):
     #     """Check if two clusters are directly density reachable."""
@@ -193,13 +203,6 @@ class DenStream(base.Clusterer):
     #         clusters[label] = cluster
 
     #     return len(clusters), clusters
-
-    def _expand_cluster(self, mc, neighborhood):
-        for idx in neighborhood:
-            item = self._init_buffer[idx]
-            if not item.covered:
-                item.covered = True
-                mc.insert(item.x, self.timestamp)
 
     # def _get_neighborhood_ids(self, item):
     #     neighborhood_ids = deque()
@@ -300,12 +303,16 @@ class DenStream(base.Clusterer):
             return      # No need to recompute clusters 
 
         core_clusters = self._get_core_clusters(self.p_micro_clusters)
+        if len(core_clusters) == 0:
+            self.clusters = []
+            self.n_clusters = 0
+            self.is_clustered = True
+            return
         i_close, j_close = self._get_close_idx_pairs(core_clusters)
 
         # Define a function to get the undirected neighbors of a cluster
         get_neighbors = lambda i: deque(j_close[i_close == i]) + deque(i_close[j_close == i])
 
-        labels = -1 * np.ones_like(core_clusters)
         visited = set()
         clusters = []
         for i in range(len(core_clusters)):
@@ -316,9 +323,6 @@ class DenStream(base.Clusterer):
             clusters.append(copy.deepcopy(core_clusters[i]))
             visited.add(i)
 
-            c = len(clusters) - 1       # TODO: Current cluster label; remove after debugging/testing
-            labels[i] = c
-
             neighbors = get_neighbors(i)
             while neighbors:    # BFS to find connected components
                 j = neighbors.popleft()
@@ -326,8 +330,6 @@ class DenStream(base.Clusterer):
                     clusters[-1].merge(copy.deepcopy(core_clusters[j]))
                     visited.add(j)
                     neighbors += get_neighbors(j)   # Add neighbors of j to the queue
-                else:                               
-                    assert labels[j] == labels[i]   # TODO: Remove after debugging/testing
 
         self.n_clusters, self.clusters = len(clusters), clusters
         self.is_clustered = True
@@ -340,8 +342,8 @@ class DenStream(base.Clusterer):
         i_close, j_close = self._get_close_idx_pairs(core_clusters)
         n_core_clusters = len(core_clusters)
 
-        G = csr_matrix((np.ones_like(i), (i,j)), shape=(n_core_clusters, n_core_clusters), dtype=bool)
-        self.n_clusters, cluster_labels = cs_graph.connected_components(G, directed=False)
+        G = csr_matrix((np.ones_like(i_close), (i_close,j_close)), shape=(n_core_clusters, n_core_clusters), dtype=bool)
+        self.n_clusters, cluster_labels = csgraph.connected_components(G, directed=False)
 
         clusters = []
         for i in range(self.n_clusters):
@@ -361,12 +363,13 @@ class DenStream(base.Clusterer):
         i_close, j_close = self._get_close_idx_pairs(core_clusters)
         
         G = nx.Graph()
-        G.add_nodes_from(range(len(centers)))
-        G.add_edges_from(zip(i, j))
+        G.add_nodes_from(range(len(core_clusters)))
+        G.add_edges_from(zip(i_close, j_close))
 
         clusters = []
-        for component in nx.connected_components(G, backend='cugraph'):
-            cluster_elements = copy.deepcopy(core_clusters[np.array(component)])
+        for component in nx.connected_components(G):#, backend='cugraph'):
+            component = np.fromiter(component, int, len(component))
+            cluster_elements = copy.deepcopy(core_clusters[component])
             cluster = cluster_elements[0]
             for c in cluster_elements[1:]:
                 cluster.merge(c)
@@ -424,6 +427,54 @@ class DenStream(base.Clusterer):
             if omc.calc_weight(self.timestamp) >= xi(omc)
         ]
 
+    def _prune_safe(self):
+        # Get the indices of the p-micro-clusters that need to be pruned
+        pmc_prune_indices = [
+            i for i, pmc in enumerate(self.p_micro_clusters)
+            if pmc.calc_weight(self.timestamp) < self.beta * self.mu
+        ]
+        for i in reversed(pmc_prune_indices):
+            # For each p-micro-cluster to be pruned, try to save that information
+            pmc = self.p_micro_clusters.pop(i)
+            x = pmc.calc_center(self.timestamp)
+            
+            # Try to merge with the nearest p-micro-cluster
+            if len(self.p_micro_clusters) > 0:
+                closest_pmc_idx = self._get_closest_cluster_idx(x, self.p_micro_clusters)
+                updated_pmc = copy.deepcopy(self.p_micro_clusters[closest_pmc_idx])
+                updated_pmc.merge(pmc)
+                is_valid_pmc = updated_pmc.calc_weight(self.timestamp) >= self.beta*self.mu
+                if is_valid_pmc and updated_pmc.calc_radius(self.timestamp) <= self.epsilon:
+                    # Merge the two p-micro-clusters
+                    self.p_micro_clusters[closest_pmc_idx] = updated_pmc
+                    continue
+            
+            # Try to merge into the nearest o-micro-cluster
+            if len(self.o_micro_clusters) > 0:
+                closest_omc_idx = self._get_closest_cluster_idx(x, self.o_micro_clusters)
+                updated_omc = copy.deepcopy(self.o_micro_clusters[closest_omc_idx])
+                updated_omc.merge(pmc)
+                if updated_omc.calc_radius(self.timestamp) <= self.epsilon:
+                    # Merge the decayed p-micro-cluster into the o-micro-cluster
+                    if updated_omc.calc_weight(self.timestamp) > self.mu * self.beta:
+                        # The o-micro-cluster becomes a p-micro-cluster
+                        del self.o_micro_clusters[closest_omc_idx]
+                        self.p_micro_clusters.append(updated_omc)
+                    else:
+                        self.o_micro_clusters[closest_omc_idx] = updated_omc
+                    continue
+            
+            # Turn the decayed p-micro-cluster into an o-micro-cluster
+            self.o_micro_clusters.append(pmc)
+
+        # Prune the o-micro-clusters that are least likely to develop into p-micro-clusters
+        f = lambda t: 2**(-self.decaying_factor * t)
+        xi = lambda omc: (f(self.timestamp - omc.creation_time + self._time_period) - 1) / (f(self._time_period) - 1)
+        self.o_micro_clusters = [
+            omc for omc in self.o_micro_clusters 
+            if omc.calc_weight(self.timestamp) >= xi(omc)
+        ]
+
     def learn_one(self, x):
         self.is_clustered = False
         self._n_samples_seen += 1
@@ -433,7 +484,7 @@ class DenStream(base.Clusterer):
         # Initialization
         if not self.initialized:
             self._init_buffer.append(x)
-            if self.n_samples_seen >= self.n_samples_init:
+            if self._n_samples_seen >= self.n_samples_init:
                 self._initial_dbscan()
                 self.initialized = True
                 del self._init_buffer
@@ -448,14 +499,14 @@ class DenStream(base.Clusterer):
     def predict_one(self, x):
         # This function handles the case when a clustering request arrives.
         # implementation of the DBSCAN algorithm proposed by Ester et al.
-        self.predict(np.atleast_2d(x))
+        return self.predict(np.atleast_2d(x))
 
     def predict(self, X):
         self._recluster()
         return self._get_closest_cluster_idx(X, self.clusters, max_dist=self.epsilon)
 
 
-class DenStreamMicroCluster(metaclass=ABCMeta):
+class DenStreamMicroCluster:
     """DenStream Micro-cluster class"""
 
     def __init__(self, X, timestamp, decaying_factor):
@@ -510,7 +561,7 @@ class DenStreamMicroCluster(metaclass=ABCMeta):
         """
         self._update(timestamp)
         variances = (self._cf2 / self._w) - np.square(self._cf1 / self._w)
-        return np.sqrt(np.sum(variances))
+        return np.sum(np.sqrt(variances))
         
     def insert(self, X, timestamp):
         """Inserts a new point or array of points into the micro-cluster."""

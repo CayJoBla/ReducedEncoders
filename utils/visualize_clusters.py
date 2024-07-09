@@ -9,7 +9,6 @@ def get_cluster_colormap(num_clusters, cmap='hsv'):
 
     Parameters:
         num_clusters (int): The number of clusters.
-        outliers (bool): Whether to include a color for outliers (idx:-1).
         cmap (str or matplotlib.colors.Colormap): The base colormap to pull
             colors from. Default is 'hsv'.
 
@@ -28,7 +27,7 @@ def get_cluster_colormap(num_clusters, cmap='hsv'):
         colors = np.vstack(([[0.5, 0.5, 0.5, 1]], colors))  # Add gray for outliers
 
     cluster_cmap = ListedColormap(colors)
-    boundaries = np.arange(-1 if outliers else 0, num_clusters+1)
+    boundaries = np.arange(-1, num_clusters+1)
     cluster_norm = BoundaryNorm(boundaries, cluster_cmap.N, clip=True)
 
     return cluster_cmap, cluster_norm
