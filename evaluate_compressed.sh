@@ -5,7 +5,7 @@ export TASK_NAME=$1
 python evaluate_compressed.py \
   --model cayjobla/all-mpnet-base-v2-compressed \
   --tokenizer cayjobla/all-mpnet-base-v2-compressed \
-  --revision variable \
+  --revision unnormalized \
   --task $TASK_NAME \
   --batch_size 16 \
   --learning_rate 3e-5 \
