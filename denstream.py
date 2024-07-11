@@ -54,7 +54,6 @@ class DenStream:
         epsilon: float = 0.02,
         n_samples_init: int = 1000,
         stream_speed: int = 100,
-        blind_init: bool = False,
     ):
         super().__init__()
         self.timestamp = 0
@@ -66,18 +65,16 @@ class DenStream:
         self.stream_speed = stream_speed
 
         self.n_clusters = 0
-        self.clusters: List[DenStreamMicroCluster] = []
         self.p_micro_clusters: List[DenStreamMicroCluster] = []
         self.o_micro_clusters: List[DenStreamMicroCluster] = []
+        self._core_mask = np.array([], dtype=bool)
+        self.clustering = np.array([-1], dtype=int)
         self.is_clustered = False
 
         beta_mu = self.beta * self.mu
         self._time_period = math.ceil(
             math.log(beta_mu / (beta_mu - 1)) / self.decaying_factor
         )
-        if not blind_init:
-            self._init_buffer: list = []
-        self.initialized = blind_init
         self._n_samples_seen = 0
 
         # Check that the value of beta is within the range (0,1]
@@ -92,14 +89,15 @@ class DenStream:
             )
 
     @property
-    def centers(self):
-        return self._get_cluster_centers(self.clusters)
+    def c_micro_clusters(self):
+        if not self.is_clustered:   # Recompute which clusters are core clusters
+            self._core_mask = np.array(
+                [c.calc_weight(self.timestamp) > self.mu for c in self.p_micro_clusters], 
+            dtype=bool)
+        return np.array(self.p_micro_clusters)[self._core_mask]
 
     def _get_cluster_centers(self, clusters):
-        return np.array([c.calc_center(self.timestamp) for c in clusters], dtype=float)
-
-    def _get_core_clusters(self, clusters):
-        return np.array([c for c in clusters if c.calc_weight(self.timestamp) > self.mu], dtype=object)
+        return np.array([c.center for c in clusters], dtype=float)
 
     def _get_closest_cluster_idx(self, X, clusters, max_dist=np.inf):
         """Get the index of the closest cluster to each point in X. 
@@ -133,7 +131,7 @@ class DenStream:
             closest_pmc_idx = self._get_closest_cluster_idx(x, self.p_micro_clusters)
             updated_pmc = copy.deepcopy(self.p_micro_clusters[closest_pmc_idx])
             updated_pmc.insert(x, self.timestamp)
-            if updated_pmc.calc_radius(self.timestamp) <= self.epsilon:
+            if updated_pmc.radius <= self.epsilon:
                 # Merge the new point into the p-micro-cluster
                 self.p_micro_clusters[closest_pmc_idx] = updated_pmc
                 return
@@ -143,7 +141,7 @@ class DenStream:
             closest_omc_idx = self._get_closest_cluster_idx(x, self.o_micro_clusters)
             updated_omc = copy.deepcopy(self.o_micro_clusters[closest_omc_idx])
             updated_omc.insert(x, self.timestamp)
-            if updated_omc.calc_radius(self.timestamp) <= self.epsilon:
+            if updated_omc.radius <= self.epsilon:
                 # Merge the new point into the o-micro-cluster
                 if updated_omc.calc_weight(self.timestamp) > self.mu * self.beta:
                     # The o-micro-cluster becomes a p-micro-cluster
@@ -164,14 +162,10 @@ class DenStream:
     # def _is_directly_density_reachable(self, c_p, c_q):
     #     """Check if two clusters are directly density reachable."""
     #     # Both clusters are core micro-clusters
-    #     if self._is_core_cluster(c_p) and self._is_core_micro_cluster(c_q):
-    #         c_p_center = c_p.calc_center(self.timestamp)
-    #         c_q_center = c_q.calc_center(self.timestamp)
-    #         distance = self._distance(c_p_center, c_q_center)
+    #     if self._is_core_cluster(c_p) and self._is_core_cluster(c_q):
+    #         distance = self._distance(c_p.center, c_q.center)
     #         if distance < 2 * self.epsilon:             # Clusters are close
-    #             c_p_radius = c_p.calc_radius(self.timestamp)
-    #             c_q_radius = c_q.calc_radius(self.timestamp)
-    #             if distance <= c_p_radius + c_q_radius: # Clusters are overlapping
+    #             if distance <= c_p.radius + c_q.radius: # Clusters are overlapping
     #                 return True
     #     return False
 
@@ -218,44 +212,44 @@ class DenStream:
         j = k + 1 + i*(3 - 2*n + i)//2
         return i, j
 
-    def _initial_dbscan(self):
-        # Find the core points and their neighbors
-        X = np.array(self._init_buffer)
-        distances = cdist(X, X)
-        connected = distances <= self.epsilon
-        is_core_point = np.sum(connected, axis=1) >= (self.beta * self.mu)
-        np.fill_diagonal(connected, False)  # Don't count the point itself as a neighbor
-        i_close, j_close = np.argwhere(connected).T
+    # def _initial_dbscan(self):
+    #     # Find the core points and their neighbors
+    #     X = np.array(self._init_buffer)
+    #     distances = cdist(X, X)
+    #     connected = distances <= self.epsilon
+    #     is_core_point = np.sum(connected, axis=1) >= (self.beta * self.mu)
+    #     np.fill_diagonal(connected, False)  # Don't count the point itself as a neighbor
+    #     i_close, j_close = np.argwhere(connected).T
 
-        get_neighbors = lambda i: deque(j_close[i_close == i])
+    #     get_neighbors = lambda i: deque(j_close[i_close == i])
        
-        # Initialize values for the BFS
-        visited = set()
-        p_micro_clusters = []
+    #     # Initialize values for the BFS
+    #     visited = set()
+    #     p_micro_clusters = []
 
-        # Iterate over the core points
-        for i in np.arange(X.shape[0])[is_core_point]:
-            if i in visited:    # Skip if visited
-                continue
+    #     # Iterate over the core points
+    #     for i in np.arange(X.shape[0])[is_core_point]:
+    #         if i in visited:    # Skip if visited
+    #             continue
 
-            visited.add(i)      # Mark as visited
-            cluster = [i]
-            neighbors = get_neighbors(i)
-            while neighbors:
-                j = neighbors.popleft()
-                if j in visited:        # If in a different cluster, skip
-                    continue            # (already a border point of another cluster)
-                visited.add(j)
-                cluster.append(j)
-                if is_core_point[j]:    # If j is a core point, add its neighbors
-                    neighbors += get_neighbors(j)
-            p_micro_clusters.append(    # Create a new p-micro-cluster
-                DenStreamMicroCluster(
-                    X[cluster], 
-                    self.timestamp, 
-                    self.decaying_factor)
-            )
-        self.p_micro_clusters = p_micro_clusters
+    #         visited.add(i)      # Mark as visited
+    #         cluster = [i]
+    #         neighbors = get_neighbors(i)
+    #         while neighbors:
+    #             j = neighbors.popleft()
+    #             if j in visited:        # If in a different cluster, skip
+    #                 continue            # (already a border point of another cluster)
+    #             visited.add(j)
+    #             cluster.append(j)
+    #             if is_core_point[j]:    # If j is a core point, add its neighbors
+    #                 neighbors += get_neighbors(j)
+    #         p_micro_clusters.append(    # Create a new p-micro-cluster
+    #             DenStreamMicroCluster(
+    #                 X[cluster], 
+    #                 self.timestamp, 
+    #                 self.decaying_factor)
+    #         )
+    #     self.p_micro_clusters = p_micro_clusters
 
     # TODO: Need to do testing on which of these two versions is faster
     #       Tests and logic indicate that the second version is faster, since the clusters
@@ -273,7 +267,7 @@ class DenStream:
 
     #     # Of the close pairs, find those that are overlapping
     #     close_cluster_indices = np.unique((i, j))
-    #     radii = np.array([clusters[i].calc_radius(self.timestamp) if i in close_cluster_indices
+    #     radii = np.array([clusters[i].radius if i in close_cluster_indices
     #                       else 0 for i in range(n_clusters)])
     #     pair_indices = np.argwhere(distances[linear_indices] < radii[i]+radii[j]).ravel()
     #     return i[pair_indices], j[pair_indices]
@@ -281,13 +275,13 @@ class DenStream:
     def _get_close_idx_pairs(self, clusters):
         # TODO: This method may achieve a slight speedup with the _linear_2_triu_idx function in the above method
         """Compute the distances between all pairs of cluster centers and return the
-        indices of the pairs that are within 2*epsilon of each other.
+        indices of the pairs that are within the sum of the radii of the clusters.
         """
         # Compute pairwise distances between cluster centers
         distances = pdist(self._get_cluster_centers(clusters))
 
         # Compute the radii of the clusters and pairwise radius sums
-        radii = np.array([c.calc_radius(self.timestamp) for c in clusters])
+        radii = np.array([c.radius for c in clusters])
         radii_sum = radii[:, None] + radii[None, :]
         
         # Find the pairs of clusters that overlap
@@ -297,89 +291,106 @@ class DenStream:
         return i[linear_indices], j[linear_indices]
 
     # TODO: Need to test which of the recluster methods is fastest (or is the original method fastest?)
-    def _recluster(self):
-        # This function handles the case when a clustering must be recomputed.
-        if self.is_clustered or not self.initialized:
-            return      # No need to recompute clusters 
+    # def _recluster(self):
+    #     # This function handles the case when a clustering must be recomputed.
+    #     if self.is_clustered:
+    #         return      # No need to recompute clusters 
 
-        core_clusters = self._get_core_clusters(self.p_micro_clusters)
-        if len(core_clusters) == 0:
-            self.clusters = []
+    #     c_micro_clusters = self.c_micro_clusters
+    #     if len(c_micro_clusters) == 0:
+    #         self.clusters = []
+    #         self.n_clusters = 0
+    #         self.is_clustered = True
+    #         return
+    #     i_close, j_close = self._get_close_idx_pairs(c_micro_clusters)
+
+    #     # Define a function to get the undirected neighbors of a cluster
+    #     get_neighbors = lambda i: deque(j_close[i_close == i]) + deque(i_close[j_close == i])
+
+    #     visited = set()
+    #     clusters = []
+    #     for i in range(len(c_micro_clusters)):
+    #         if i in visited:
+    #             continue
+
+    #         # Start a new cluster
+    #         clusters.append(copy.deepcopy(c_micro_clusters[i]))
+    #         visited.add(i)
+
+    #         neighbors = get_neighbors(i)
+    #         while neighbors:    # BFS to find connected components
+    #             j = neighbors.popleft()
+    #             if j not in visited:
+    #                 clusters[-1].merge(copy.deepcopy(c_micro_clusters[j]))
+    #                 visited.add(j)
+    #                 neighbors += get_neighbors(j)   # Add neighbors of j to the queue
+
+    #     self.n_clusters, self.clusters = len(clusters), clusters
+    #     self.is_clustered = True
+
+    def _recluster(self):
+        if self.is_clustered:
+            return
+
+        c_micro_clusters = self.c_micro_clusters
+        num_core_mc = len(c_micro_clusters)
+        if num_core_mc == 0:
             self.n_clusters = 0
+            self.clustering = np.array([-1], dtype=int)
             self.is_clustered = True
             return
-        i_close, j_close = self._get_close_idx_pairs(core_clusters)
 
-        # Define a function to get the undirected neighbors of a cluster
-        get_neighbors = lambda i: deque(j_close[i_close == i]) + deque(i_close[j_close == i])
+        i, j = self._get_close_idx_pairs(c_micro_clusters)
 
-        visited = set()
-        clusters = []
-        for i in range(len(core_clusters)):
-            if i in visited:
-                continue
+        G = csr_matrix((np.ones_like(i), (i,j)), shape=(num_core_mc, num_core_mc), dtype=bool)
+        n_clusters, labels = csgraph.connected_components(G, directed=False)
 
-            # Start a new cluster
-            clusters.append(copy.deepcopy(core_clusters[i]))
-            visited.add(i)
-
-            neighbors = get_neighbors(i)
-            while neighbors:    # BFS to find connected components
-                j = neighbors.popleft()
-                if j not in visited:
-                    clusters[-1].merge(copy.deepcopy(core_clusters[j]))
-                    visited.add(j)
-                    neighbors += get_neighbors(j)   # Add neighbors of j to the queue
-
-        self.n_clusters, self.clusters = len(clusters), clusters
+        self.n_clusters = n_clusters
+        self.clustering = np.append(labels, -1)     # Add a label for outliers
         self.is_clustered = True
 
-    def _recluster_scipy(self):
-        if self.is_clustered or not self.initialized:
-            return
-
-        core_clusters = self._get_core_clusters(self.p_micro_clusters)
-        i_close, j_close = self._get_close_idx_pairs(core_clusters)
-        n_core_clusters = len(core_clusters)
-
-        G = csr_matrix((np.ones_like(i_close), (i_close,j_close)), shape=(n_core_clusters, n_core_clusters), dtype=bool)
-        self.n_clusters, cluster_labels = csgraph.connected_components(G, directed=False)
-
-        clusters = []
-        for i in range(self.n_clusters):
-            cluster_elements = copy.deepcopy(core_clusters[cluster_labels == i])
-            cluster = cluster_elements[0]
-            for c in cluster_elements[1:]:
-                cluster.merge(c)
-            clusters.append(cluster)
-
-        self.n_clusters, self.clusters = len(clusters), clusters
+        return i, j
 
     def _recluster_nxgraph(self):
-        if self.is_clustered or not self.initialized:
+        if self.is_clustered:
             return
 
-        core_clusters = self._get_core_clusters(self.p_micro_clusters)
-        i_close, j_close = self._get_close_idx_pairs(core_clusters)
+        c_micro_clusters = self.c_micro_clusters
+        num_core_mc = len(c_micro_clusters)
+        if num_core_mc == 0:
+            self.n_clusters = 0
+            self.clustering = np.array([-1], dtype=int)
+            self.is_clustered = True
+            return
+
+        i, j = self._get_close_idx_pairs(c_micro_clusters)
         
         G = nx.Graph()
-        G.add_nodes_from(range(len(core_clusters)))
-        G.add_edges_from(zip(i_close, j_close))
+        G.add_nodes_from(range(num_core_mc))
+        G.add_edges_from(zip(i, j))
 
-        clusters = []
-        for component in nx.connected_components(G):#, backend='cugraph'):
-            component = np.fromiter(component, int, len(component))
-            cluster_elements = copy.deepcopy(core_clusters[component])
-            cluster = cluster_elements[0]
-            for c in cluster_elements[1:]:
-                cluster.merge(c)
-            clusters.append(cluster)
+        # clusters = []
+        # for component in nx.connected_components(G):#, backend='cugraph'):
+        #     component = np.fromiter(component, int, len(component))
+        #     cluster_elements = copy.deepcopy(c_micro_clusters[component])
+        #     cluster = cluster_elements[0]
+        #     for c in cluster_elements[1:]:
+        #         cluster.merge(c)
+        #     clusters.append(cluster)
+        # self.n_clusters, self.clusters = len(clusters), clusters
 
-        self.n_clusters, self.clusters = len(clusters), clusters
+        labels = np.full(num_core_mc, -1)
+        for i, component in enumerate(nx.connected_components(G)):
+            labels[list(component)] = i
+            print(component)
+
+        self.n_clusters = i + 1
+        self.clustering = np.append(labels, -1)     # Add a label for outliers
+        self.is_clustered = True
 
     # def _recluster(self):
     #     # This function handles the case when a clustering must be recomputed.
-    #     if self.is_clustered or not self.initialized:
+    #     if self.is_clustered:
     #         return      # No need to recompute clusters 
 
     #     # cluster counter; in this algorithm cluster labels start with 0
@@ -436,7 +447,7 @@ class DenStream:
         for i in reversed(pmc_prune_indices):
             # For each p-micro-cluster to be pruned, try to save that information
             pmc = self.p_micro_clusters.pop(i)
-            x = pmc.calc_center(self.timestamp)
+            x = pmc.center
             
             # Try to merge with the nearest p-micro-cluster
             if len(self.p_micro_clusters) > 0:
@@ -444,7 +455,7 @@ class DenStream:
                 updated_pmc = copy.deepcopy(self.p_micro_clusters[closest_pmc_idx])
                 updated_pmc.merge(pmc)
                 is_valid_pmc = updated_pmc.calc_weight(self.timestamp) >= self.beta*self.mu
-                if is_valid_pmc and updated_pmc.calc_radius(self.timestamp) <= self.epsilon:
+                if is_valid_pmc and updated_pmc.radius <= self.epsilon:
                     # Merge the two p-micro-clusters
                     self.p_micro_clusters[closest_pmc_idx] = updated_pmc
                     continue
@@ -454,7 +465,7 @@ class DenStream:
                 closest_omc_idx = self._get_closest_cluster_idx(x, self.o_micro_clusters)
                 updated_omc = copy.deepcopy(self.o_micro_clusters[closest_omc_idx])
                 updated_omc.merge(pmc)
-                if updated_omc.calc_radius(self.timestamp) <= self.epsilon:
+                if updated_omc.radius <= self.epsilon:
                     # Merge the decayed p-micro-cluster into the o-micro-cluster
                     if updated_omc.calc_weight(self.timestamp) > self.mu * self.beta:
                         # The o-micro-cluster becomes a p-micro-cluster
@@ -481,14 +492,14 @@ class DenStream:
         if self._n_samples_seen % self.stream_speed == 0:
             self.timestamp += 1
 
-        # Initialization
-        if not self.initialized:
-            self._init_buffer.append(x)
-            if self._n_samples_seen >= self.n_samples_init:
-                self._initial_dbscan()
-                self.initialized = True
-                del self._init_buffer
-            return
+        # # Initialization
+        # if not self.initialized:
+        #     self._init_buffer.append(x)
+        #     if self._n_samples_seen >= self.n_samples_init:
+        #         self._initial_dbscan()
+        #         self.initialized = True
+        #         del self._init_buffer
+        #     return
 
         # Merge
         self._merge(x)
@@ -497,13 +508,12 @@ class DenStream:
             self._prune()
 
     def predict_one(self, x):
-        # This function handles the case when a clustering request arrives.
-        # implementation of the DBSCAN algorithm proposed by Ester et al.
         return self.predict(np.atleast_2d(x))
 
     def predict(self, X):
         self._recluster()
-        return self._get_closest_cluster_idx(X, self.clusters, max_dist=self.epsilon)
+        closest_idx = self._get_closest_cluster_idx(X, self.c_micro_clusters, max_dist=self.epsilon)
+        return self.clustering[closest_idx]
 
 
 class DenStreamMicroCluster:
@@ -542,12 +552,13 @@ class DenStreamMicroCluster:
         self._update(timestamp)
         return self._w
 
-    def calc_center(self, timestamp):
+    @ property
+    def center(self):
         """Computes the center of the micro-cluster."""
-        self._update(timestamp)
         return self._cf1 / self._w
 
-    def calc_radius(self, timestamp):
+    @property
+    def radius(self):
         """Computes the radius of the micro-cluster.
         Note that this forumla for the radius does not match the formula
         presented in the original paper, due to the fact that the original
@@ -559,9 +570,8 @@ class DenStreamMicroCluster:
         In this case, the standard deviation is computed in each dimension
         and the norm of the resulting vector is taken to get the radius.
         """
-        self._update(timestamp)
         variances = (self._cf2 / self._w) - np.square(self._cf1 / self._w)
-        return np.sum(np.sqrt(variances))
+        return np.sqrt(np.sum(variances))
         
     def insert(self, X, timestamp):
         """Inserts a new point or array of points into the micro-cluster."""
