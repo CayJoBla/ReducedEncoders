@@ -80,9 +80,12 @@ class DenStream:
         # self._knn_dist = None   # Should be initialized with some initialization step 
         # self._knn_idx = None
 
-        beta_mu = self.beta * self.mu
+        # beta_mu = self.beta * self.mu
+        # self._time_period = math.ceil(
+        #     math.log(beta_mu / (beta_mu - 1)) / self.decaying_factor
+        # )
         self._time_period = math.ceil(
-            math.log(beta_mu / (beta_mu - 1)) / self.decaying_factor
+            -math.log(1 - 1 / (self.beta * self.mu)) / self.decaying_factor
         )
         self._n_samples_seen = 0
 
@@ -149,7 +152,8 @@ class DenStream:
                 if updated_omc.calc_weight(self.timestamp) > self.mu * self.beta:
                     # The o-micro-cluster becomes a p-micro-cluster
                     del self.o_micro_clusters[closest_omc_idx]
-                    self._add_micro_cluster(updated_omc)
+                    # self._add_micro_cluster(updated_omc)
+                    self.p_micro_clusters.append(updated_omc)
                 else:
                     self.o_micro_clusters[closest_omc_idx] = updated_omc
                 return
@@ -193,36 +197,62 @@ class DenStream:
 
     @property
     def mreach_distances(self):
-        """Returns the matrix of mutual reachability distances between all pairs of
-        p-micro-clusters. The mutual reachability distance between two p-micro-clusters
-        is the maximum of the core distance of each cluster and the distance between
-        the two clusters.
+        """Returns a matrix of mutual reachability distances between all pairs of
+        p-micro-clusters. Here we use a custom mutual reachability distance, defined 
+        as max(radius_i, radius_j, distance_ij) / min(weight_i, weight_j).
+        This metric satisfies mreach(a,a) <= mreach(a,b) for all a,b. It may also
+        satisfy the triangle inequality, but I have yet to prove this.
+
+        This removes the need to update core distances when micro-cluster is added
+        or removed.
         """
-        core_distances = self.core_distances
-        core_dist_pairs = np.maximum.outer(core_distances, core_distances)
-        return np.clip(core_dist_pairs, squareform(self._distances), None)
+        centers = self._get_cluster_centers(self.p_micro_clusters)
+        weights = np.array([mc.calc_weight(self.timestamp) for mc in self.p_micro_clusters])
+        radii = np.array([mc.radius for mc in self.p_micro_clusters])
 
-    def _insert_to_MST(self, v):
-        new_MST = self.MST.copy()
-        new_MST.remove_edges_from(new_MST.edges)
-        edge_weights = self.mreach_distances
-        processed = set()
+        distances = cdist(centers, centers)
+        inter_dist = np.clip(np.maximum.outer(radii, radii), distances, None)
+        return inter_dist #* self.mu / np.minimum.outer(weights, weights)
 
-        def insert_edge(r):     # TODO: ?????
-            processed.add(r)
-            new_edge = (r, v)
-            for w in self.MST.neighbors(r):
-                if w not in processed:
-                    insert_edge(w)
-                    largest_edge = t if edge_weights[t] > edge_weights[new_edge] else new_edge
-                    smallest_edge = t if edge_weights[t] < edge_weights[new_edge] else new_edge
-                    if l['weight'] < new_edge['weight']:
-                        new_edge = l
+    # @property
+    # def mreach_distances(self):
+    #     """Returns the matrix of mutual reachability distances between all pairs of
+    #     p-micro-clusters. The mutual reachability distance between two p-micro-clusters
+    #     is the maximum of the core distance of each cluster and the distance between
+    #     the two clusters.
+    #     """
+    #     core_distances = self.core_distances
+    #     core_dist_pairs = np.maximum.outer(core_distances, core_distances)
+    #     return np.clip(core_dist_pairs, squareform(self._distances), None)
 
+    def insert_to_MST(new_weights):
+        # Add new edges to graph
+        z = len(self.MST.nodes)
+        self.MST.add_edges_from([(i, z, {'weight': w}) for i, w in enumerate(new_weights)])
+        weight = lambda x: self.MST[x[0]][x[1]]['weight']   # Function to get the weight of an edge
 
-            t = new_edge['weight']
+        new_MST = nx.Graph()
+        new_MST.add_nodes_from(self.MST.nodes)
+        visited = np.zeros(len(self.MST.nodes)-1, dtype=bool)
 
+        t = None
+        def insert(r):
+            nonlocal t
+            visited[r] = True
+            m = (r, z)
+            for u in MST.neighbors(r):
+                if u != z and not visited[u]:
+                    insert(u)
+                    s, l = sorted([(r,u), t], key=weight)
+                    new_MST.add_edge(*s, weight=weight(s))
+                    if weight[l] < weight[m]:
+                        m = l
+            t = m
 
+        insert(0)                               # Begin recursion
+        new_MST.add_edge(*t, weight=weight(t))  # Need to add the last edge
+
+        return new_MST
 
     def _add_micro_cluster(mc):
         # Determine which core distances need to be updated
@@ -242,6 +272,16 @@ class DenStream:
         new_distances[adj_mask] = adj_dist
         self._distances = new_distances
         mreach_dist = self.mreach_distances
+
+        # Reconstruct the MST according to the new edge weights of the affected nodes
+        for i in affected:
+            updated_dist = mreach_dist[i][:-1]
+            updated_dist[i] = -1
+            new_MST = self.insert_to_MST(updated_dist)
+            self.MST = nx.contracted_edge(new_MST, (i,len(self.MST)), self_loops=False)
+
+        # Insert the new node into the MST
+        self.MST = self.insert_to_MST(mreach_dist[-1])
 
     def _drop_micro_cluster(idx):
         # Get the distances between micro-cluster to be removed and all other micro-clusters
@@ -299,6 +339,71 @@ class DenStream:
         linear_indices = np.argwhere(distances <= radii_sum[(i,j)]).ravel()
         
         return i[linear_indices], j[linear_indices]
+
+    def _recluster_hdbscan(self):
+        if self.is_clustered:
+            return
+
+        edges = np.array(self.MST.edges(data='weight'))
+        sorted_edges = edges[np.argsort(edges.T[2])]
+
+        cluster_weights = np.array([c.calc_weight(self.timestamp) for c in self.p_micro_clusters])
+        U = UnionFind(cluster_weights)
+        hierarchy = []
+        for i, j, d in sorted_edges:
+            root_i, root_j = U.find(i), U.find(j)
+            root_union = U.union(i, j)
+            hierarchy.append((root_i, root_j, d, U.size[root_union]))
+
+        root = 2 * hierarchy.shape[0]
+        num_points = hierarchy.shape[0] + 1
+        next_label = num_points + 1
+
+        bfs = deque(len(hierarchy) + num_points - 1)
+
+        relabel = np.empty(root + 1, dtype=np.intp)
+        relabel[root] = num_points
+        result_list = []
+
+        while bfs:
+            node = bfs.popleft()
+            if node < num_points:
+                continue
+            left, right, dist, size = hierarchy[node - num_points]
+            lambda_value = 1 / dist if dist > 0 else np.inf
+
+            left_size = hierarchy[left - num_points][3] if left >= num_points else cluster_weights[left]
+            right_size = hierarchy[right - num_points][3] if right >= num_points else cluster_weights[right]
+
+            if left_size >= self.min_cluster_weight and right_size >= self.min_cluster_weight:
+                relabel[left] = next_label
+                next_label += 1
+                result_list.append((relabel[node], relabel[left], lambda_value, left_size))
+
+                relabel[right] = next_label
+                next_label += 1
+                result_list.append((relabel[node], relabel[right], lambda_value, right_size))
+
+                bfs.append(left)
+                bfs.append(right)
+            else:
+                if left_size < self.min_cluster_weight:
+                    if right_size >= self.min_cluster_weight:
+                        relabel[right] = relabel[node]
+                        bfs.append(right)
+                    
+                if right_size < self.min_cluster_weight:
+                    if left_size >= self.min_cluster_weight:
+                        relabel[left] = relabel[node]
+                        bfs.append(left)
+                
+
+            
+
+
+        
+
+    
 
     def _recluster(self):
         if self.is_clustered:

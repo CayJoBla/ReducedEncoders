@@ -28,6 +28,8 @@
 ## I-HASTREAM
 * Start implementing the I-HASTREAM algorithm, keeping our use case in mind
 * Make sure that it will work with the DenStream online micro-clusters if we want to go that route
+## SKDStream
+* Note that this algorithm could maybe be used as well if the other route does not work out
 
 # Topic Modeling
 ## c-TF-IDF
