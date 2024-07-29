@@ -6,6 +6,8 @@ import numpy as np
 from scipy.spatial.distance import cdist, pdist
 from scipy.sparse import csr_matrix, csgraph
 import networkx as nx
+from scipy.sparse import csr_matrix
+from bertopic.vectorizer import ClassTfidfTransformer
 
 # TODO: What of this algorithm is parallelizable?
 
@@ -54,6 +56,7 @@ class DenStream:
         epsilon: float = 0.02,
         n_samples_init: int = 1000,
         stream_speed: int = 100,
+        term_threshold: float = 0.1,
     ):
         super().__init__()
         self.timestamp = 0
@@ -63,6 +66,7 @@ class DenStream:
         self.epsilon = epsilon
         self.n_samples_init = n_samples_init
         self.stream_speed = stream_speed
+        self.term_threshold = term_threshold    # Weight threshold to drop terms from micro-clusters
 
         self.n_clusters = 0
         self.p_micro_clusters: List[DenStreamMicroCluster] = []
@@ -122,7 +126,7 @@ class DenStream:
     #     idx = np.argmin(distances)
     #     return idx if distances[idx] <= max_dist else -1
 
-    def _merge(self, x):
+    def _merge(self, x, document=None):
         """Merge a new point into the clustering. Either merges it into an existing
         p-micro-cluster, an existing o-micro-cluster, or creates a new o-micro-cluster.
         """
@@ -130,23 +134,25 @@ class DenStream:
         if len(self.p_micro_clusters) > 0:
             closest_pmc_idx = self._get_closest_cluster_idx(x, self.p_micro_clusters)
             updated_pmc = copy.deepcopy(self.p_micro_clusters[closest_pmc_idx])
-            updated_pmc.insert(x, self.timestamp)
+            updated_pmc.insert(x, document, self.timestamp)
             if updated_pmc.radius <= self.epsilon:
                 # Merge the new point into the p-micro-cluster
                 self.p_micro_clusters[closest_pmc_idx] = updated_pmc
+                self.is_clustered = False   # TODO: Ideally, we instead want to set a threshold for how much changes before we need to recluster
                 return
         
         # Try to merge x into the nearest o-micro-cluster
         if len(self.o_micro_clusters) > 0:
             closest_omc_idx = self._get_closest_cluster_idx(x, self.o_micro_clusters)
             updated_omc = copy.deepcopy(self.o_micro_clusters[closest_omc_idx])
-            updated_omc.insert(x, self.timestamp)
+            updated_omc.insert(x, document, self.timestamp)
             if updated_omc.radius <= self.epsilon:
                 # Merge the new point into the o-micro-cluster
                 if updated_omc.calc_weight(self.timestamp) > self.mu * self.beta:
                     # The o-micro-cluster becomes a p-micro-cluster
                     del self.o_micro_clusters[closest_omc_idx]
                     self.p_micro_clusters.append(updated_omc)
+                    self.is_clustered = False   # New p-mc, we need to recluster
                 else:
                     self.o_micro_clusters[closest_omc_idx] = updated_omc
                 return
@@ -154,8 +160,10 @@ class DenStream:
         # Create a new o-micro-cluster (x was not merged into any existing cluster)
         omc = DenStreamMicroCluster(
             x,
+            document,
             self.timestamp,
             self.decaying_factor,
+            self.term_threshold,
         )
         self.o_micro_clusters.append(omc)
 
@@ -486,8 +494,7 @@ class DenStream:
             if omc.calc_weight(self.timestamp) >= xi(omc)
         ]
 
-    def learn_one(self, x):
-        self.is_clustered = False
+    def learn_one(self, x, document=None):
         self._n_samples_seen += 1
         if self._n_samples_seen % self.stream_speed == 0:
             self.timestamp += 1
@@ -502,7 +509,7 @@ class DenStream:
         #     return
 
         # Merge
-        self._merge(x)
+        self._merge(x, document)
 
         if self.timestamp > 0 and self.timestamp % self._time_period == 0:
             self._prune()
@@ -515,22 +522,61 @@ class DenStream:
         closest_idx = self._get_closest_cluster_idx(X, self.c_micro_clusters, max_dist=self.epsilon)
         return self.clustering[closest_idx]
 
+    def tf_query(self):
+        """Build a sparse weight matrix of the terms in each cluster.
+        This matrix can be used to get c-TF-IDF values for each cluster.
+        """
+        self._recluster()   # Ensure that the clusters are up-to-date
+
+        terms = set()       # Get all terms
+        for i, mc in enumerate(self.p_micro_clusters):
+            terms.update(mc.tf.keys())
+        terms = sorted(terms)
+
+        # Build the sparse matrix
+        data = csr_matrix((self.n_clusters, len(terms)), dtype=float)
+        for i, label in enumerate(self.clustering):
+            mc = self.p_micro_clusters[i]
+            for j, term in enumerate(terms):
+                if term in mc.tf:
+                    data[label, j] += mc.tf[term]
+
+        return data, terms
+
+    def c_tf_idf(self):
+        data, terms = self.tf_query()
+        transformer = ClassTfidfTransformer()
+        return transformer.fit_transform(data).toarray(), terms
+
 
 class DenStreamMicroCluster:
     """DenStream Micro-cluster class"""
 
-    def __init__(self, X, timestamp, decaying_factor):
+    def __init__(self, X, documents, timestamp, decaying_factor, term_threshold=0.1):
         """Initialize a new micro-cluster. 
         X can be a single point or a 2d array of points.
         """
+        # Time values
         self.last_edit_time = timestamp
         self.creation_time = timestamp
         self.decaying_factor = decaying_factor
 
+        # Spatial values
         X = np.atleast_2d(X)
         self._cf1 = np.sum(X, axis=0, dtype=float)
         self._cf2 = np.sum(np.square(X), axis=0, dtype=float)
         self._w = float(X.shape[0])
+
+        # c-TF-IDF values
+        self.term_threshold = term_threshold
+        if documents is not None:
+            documents = np.ravel(documents)
+            self._term_w = float(len(documents))                            # Weighted number of terms in micro-cluster
+            words, counts = np.unique(documents, return_counts=True)
+            self.tf = {word: count for word, count in zip(words, counts)}   # Weighted term frequency
+        else:
+            self._term_w = 0
+            self.tf = {}
 
     def fading_function(self, t):
         return 2 ** (-self.decaying_factor * t)
@@ -545,6 +591,15 @@ class DenStreamMicroCluster:
         self._cf1 *= fading_factor 
         self._cf2 *= fading_factor
         self._w *= fading_factor
+        self._term_w *= fading_factor
+        dropped_terms = []
+        for k, v in self.tf.items():
+            self.tf[k] = v * fading_factor
+            if self.tf[k] < self.term_threshold:
+                dropped_terms.append(k)
+        for k in dropped_terms:
+            del self.tf[k]
+            
         self.last_edit_time = timestamp
 
     def calc_weight(self, timestamp):
@@ -573,13 +628,21 @@ class DenStreamMicroCluster:
         variances = (self._cf2 / self._w) - np.square(self._cf1 / self._w)
         return np.sqrt(np.sum(variances))
         
-    def insert(self, X, timestamp):
-        """Inserts a new point or array of points into the micro-cluster."""
+    def insert(self, x, document, timestamp):
+        """Inserts a single point into the micro-cluster."""
         self._update(timestamp)
-        X = np.atleast_2d(X)
-        self._cf1 += np.sum(X, axis=0)
-        self._cf2 += np.sum(np.square(X), axis=0)
-        self._w += X.shape[0]
+
+        self._cf1 += x
+        self._cf2 += np.square(x)
+        self._w += 1
+
+        if document is not None:
+            document = np.ravel(document)
+            self._term_w += len(document)
+            words, counts = np.unique(document, return_counts=True)
+            for word, count in zip(words, counts):
+                self.tf[word] = self.tf.get(word, 0) + count
+
         return self
 
     def merge(self, other):
@@ -587,7 +650,13 @@ class DenStreamMicroCluster:
         timestamp = max(self.last_edit_time, other.last_edit_time)
         self._update(timestamp)
         other._update(timestamp)
+
         self._cf1 += other._cf1
         self._cf2 += other._cf2
         self._w += other._w
+
+        self._term_w += other._term_w
+        for word, count in other.tf.items():
+            self.tf[word] = self.tf.get(word, 0) + count
+
         return self
