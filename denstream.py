@@ -1,15 +1,20 @@
 import copy
 import math
-from collections import deque
+from collections import deque, defaultdict
 from typing import List
 import numpy as np
 from scipy.spatial.distance import cdist, pdist
 from scipy.sparse import csr_matrix, csgraph
 import networkx as nx
-from scipy.sparse import csr_matrix
-from bertopic.vectorizer import ClassTfidfTransformer
+from scipy import sparse
+from bertopic.vectorizers import ClassTfidfTransformer
+from sklearn.preprocessing import normalize
 
 # TODO: What of this algorithm is parallelizable?
+
+# TODO: Consider dropping terms for TF-IDF globally instead of on a per-cluster basis (maybe in the pruning step?)
+#       Could instead use a `max_features` parameter to limit the number of terms in the TF-IDF matrix.
+#       Actually, maybe look into the OnlineCountVectorizer from the BERTopic code
 
 class DenStream:
     """My custom implementation of the DenStream algorithm. Adapted from the 
@@ -527,26 +532,53 @@ class DenStream:
         This matrix can be used to get c-TF-IDF values for each cluster.
         """
         self._recluster()   # Ensure that the clusters are up-to-date
+        c_micro_clusters = self.c_micro_clusters
 
-        terms = set()       # Get all terms
-        for i, mc in enumerate(self.p_micro_clusters):
-            terms.update(mc.tf.keys())
-        terms = sorted(terms)
-
-        # Build the sparse matrix
-        data = csr_matrix((self.n_clusters, len(terms)), dtype=float)
+        # Get the unique terms and their associated weights by cluster
+        term_ind = {}
+        term_weights = defaultdict(float)   
         for i, label in enumerate(self.clustering):
-            mc = self.p_micro_clusters[i]
-            for j, term in enumerate(terms):
-                if term in mc.tf:
-                    data[label, j] += mc.tf[term]
+            if label == -1:     # TODO: Should I be including outliers in the idf calculation?
+                continue
+            mc = c_micro_clusters[i]
+            for term, weight in mc.tf.items():
+                if term not in term_ind:
+                    term_ind[term] = len(term_ind)
+                term_weights[(label, term_ind[term])] += weight
+
+        # Build the sparse weight matrix
+        terms = np.array(sorted(term_ind.keys(), key=lambda x: term_ind[x]))
+        row_ind, col_ind, weights = zip(*[(i, j, weight) for (i, j), weight in term_weights.items()])
+        data = sparse.csr_matrix((weights, (row_ind, col_ind)), shape=(self.n_clusters, len(terms)), dtype=float)
 
         return data, terms
 
     def c_tf_idf(self):
-        data, terms = self.tf_query()
-        transformer = ClassTfidfTransformer()
-        return transformer.fit_transform(data).toarray(), terms
+        # Get the sparse weight matrix of the terms in each cluster
+        X, terms = self.tf_query()
+        n_features = X.shape[1]
+
+        # Compute the inverse document frequency
+        df = np.squeeze(np.asarray(X.sum(axis=0)))
+        avg_num_samples = X.sum(axis=1).mean()
+        idf = np.log((avg_num_samples / df) + 1)
+
+        idf_diag = sparse.diags(
+            idf,
+            offsets=0,
+            shape=(n_features, n_features),
+            format="csr",
+            dtype=float,
+        )
+
+        X = normalize(X, axis=1, norm="l1", copy=False)
+        X = X * idf_diag
+
+        # data, terms = self.tf_query()
+        # transformer = ClassTfidfTransformer()
+        # return transformer.fit_transform(data).toarray(), terms
+
+        return X, terms
 
 
 class DenStreamMicroCluster:
