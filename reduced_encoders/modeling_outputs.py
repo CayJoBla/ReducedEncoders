@@ -6,12 +6,15 @@ from transformers.utils import ModelOutput
 @dataclass
 class ReducedModelOutput(ModelOutput):
     """
-    Base class for reduced model's outputs, with potential hidden states and attentions.
-    Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
+    Reduced model output with hidden states and attentions.
 
+    Args:
+        last_hidden_state (torch.FloatTensor):
+            Sequence of reduced dimensionality hidden-states at the output of 
+            the last layer of the model.
+        unreduced_last_hidden_state (torch.FloatTensor):
+            Sequence of full-size hidden-states at the output of the last layer 
+            of the base model.
         Other args from transformers.modeling_outputs.BaseModelOutput
     """
     last_hidden_state: torch.FloatTensor = None
@@ -22,16 +25,19 @@ class ReducedModelOutput(ModelOutput):
 @dataclass
 class ReducedModelOutputWithPooling(ModelOutput):
     """
-    Base class for reduced model's outputs that also contains a reduced pooling of the last hidden states.
+    Reduced model output with hidden states, attentions, and a pooler output.
 
     Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
-        reduced_pooler_output (`torch.FloatTensor` of shape `(batch_size, reduced_size)`):
-            Pooled reduced dimensionality hidden-state resulting from reducing the dimensionality of the 
-            pooler output of the model at the output of the last layer.
-            
+        last_hidden_state (torch.FloatTensor):
+            Sequence of reduced dimensionality hidden-states at the output of 
+            the last layer of the model.
+        pooler_output (torch.FloatTensor):
+            Pooled reduced dimensionality hidden-states.
+        unreduced_last_hidden_state (torch.FloatTensor):
+            Sequence of full-size hidden-states at the output of the last layer 
+            of the base model.
+        unreduced_pooler_output (torch.FloatTensor):
+            Pooled full-size hidden-states.
         Other args from transformers.modeling_outputs.BaseModelOutputWithPooling
     """
     last_hidden_state: torch.FloatTensor = None
@@ -44,36 +50,51 @@ class ReducedModelOutputWithPooling(ModelOutput):
 @dataclass
 class ReducedModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     """
-    Base class for reduced model's outputs, with potential hidden states and attentions.
+    Reduced model output with hidden states, attentions, pooler output, past,
+    and cross attentions.
+
     Args:
-        reduced_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, reduced_size)`):
-            Sequence of reduced dimensionality hidden-states resulting from reducing the dimensionality of the 
-            last hidden state of the model at the output of the last layer.
-        reduced_pooler_output (`torch.FloatTensor` of shape `(batch_size, reduced_size)`):
-            Pooled reduced dimensionality hidden-state resulting from reducing the dimensionality of the 
-            pooler output of the model at the output of the last layer.
-            
-        Other args from transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions
+        last_hidden_state (torch.FloatTensor):
+            Sequence of reduced dimensionality hidden-states at the output of 
+            the last layer of the model.
+        pooler_output (torch.FloatTensor):
+            Pooled reduced dimensionality hidden-states.
+        unreduced_last_hidden_state (torch.FloatTensor):
+            Sequence of full-size hidden-states at the output of the last layer 
+            of the base model.
+        unreduced_pooler_output (torch.FloatTensor):
+            Pooled full-size hidden-states.
+        Other args from transformers.modeling_outputs.
+            BaseModelOutputWithPoolingAndCrossAttentions
     """
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     unreduced_last_hidden_state: torch.FloatTensor = None
     unreduced_pooler_output: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 @dataclass
 class CompressedModelForPreTrainingOutput(ModelOutput):
     """
-    Ouput type of ['MPNetCompressedForPretraining']
+    Output type of ['MPNetCompressedForPretraining']
 
     Args:
-        loss (torch.FloatTensor): Linear combination of the contrastive learning and the reconstruction loss. The contrastive 
-            learning loss is the MSE between the cosine similarity of data pairs in the original and reduced embeddings. 
-            The reconstruction loss is the MSE between the original and decoded reduced embeddings.
-        hidden_states (tuple(torch.FloatTensor)): Hidden-states of the model at the output of each layer
-        attentions (tuple(torch.FloatTensor)): Attentions weights after the attention softmax, used to compute the weighted 
-            average in the self-attention heads.
+        loss (torch.FloatTensor): 
+            Linear combination of the contrastive and reconstruction losses.
+        contrastive_loss (torch.FloatTensor):
+            Contrastive loss between the full_size and compressed embeddings.
+        reconstruction_loss (torch.FloatTensor):
+            Reconstruction loss between the full_size and reconstructed 
+            embeddings.
+        pooled_output (torch.FloatTensor):
+            Pooled full-size hidden-states.
+        reduced_pooled_output (torch.FloatTensor):
+            Pooled reduced dimensionality hidden-states.
+        reconstructed_pooled_output (torch.FloatTensor):
+            Reconstructed pooled full-size hidden-states.
     """
     loss: torch.FloatTensor = None
     contrastive_loss: torch.FloatTensor = None

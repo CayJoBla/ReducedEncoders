@@ -9,8 +9,6 @@ from .mpnet_reduced import (
     MPNetReducedPreTrainedModel, 
     MPNetReducedModel, 
     MPNetReducedForSequenceClassification, 
+    MPNetCompressedForPretraining,
     MPNetReducedConfig, 
-    MPNetCompressedForPretraining, 
-    MPNetCompressedModel, 
-    MPNetCompressedForSequenceClassification
 )

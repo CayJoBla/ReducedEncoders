@@ -1,8 +1,25 @@
-from transformers import AutoConfig, AutoModel, AutoModelForPreTraining, AutoModelForSequenceClassification
+from transformers import (
+    AutoConfig, 
+    AutoModel, 
+    AutoModelForPreTraining, 
+    AutoModelForSequenceClassification
+)
 from .configuration_bert_reduced import BertReducedConfig
-from .modeling_bert_reduced import BertReducedModel, BertReducedForPreTraining, BertReducedForSequenceClassification
+from .modeling_bert_reduced import (
+    BertReducedModel, 
+    BertReducedForPreTraining, 
+    BertReducedForSequenceClassification
+)
 
-AutoConfig.register(BertReducedConfig.model_type, BertReducedConfig)
-AutoModel.register(BertReducedConfig, BertReducedModel)
-AutoModelForPreTraining.register(BertReducedConfig, BertReducedForPreTraining)
-AutoModelForSequenceClassification.register(BertReducedConfig, BertReducedForSequenceClassification)
+AutoConfig.register(
+    BertReducedConfig.model_type, BertReducedConfig
+)
+AutoModel.register(
+    BertReducedConfig, BertReducedModel
+)
+AutoModelForPreTraining.register(
+    BertReducedConfig, BertReducedForPreTraining
+)
+AutoModelForSequenceClassification.register(
+    BertReducedConfig, BertReducedForSequenceClassification
+)

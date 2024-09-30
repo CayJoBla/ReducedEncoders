@@ -2,8 +2,11 @@
 
 import torch
 from torch import nn
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions, SequenceClassifierOutput
-from transformers.models.bert.modeling_bert import BertPreTrainingHeads, BertForPreTrainingOutput
+from transformers.modeling_outputs import SequenceClassifierOutput
+from transformers.models.bert.modeling_bert import (
+    BertPreTrainingHeads, 
+    BertForPreTrainingOutput
+)
 from transformers.activations import ACT2FN
 from transformers import BertModel
 
@@ -24,7 +27,8 @@ class BertReducedLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.transform = BertReducedPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.reduced_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.reduced_size, config.vocab_size, 
+                                    bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
@@ -49,7 +53,8 @@ class BertReducedPredictionHeadTransform(nn.Module):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.reduced_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.reduced_size, 
+                                        eps=config.layer_norm_eps)
     
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -60,26 +65,34 @@ class BertReducedPredictionHeadTransform(nn.Module):
 
 class BertReducedModel(BertReducedPreTrainedModel):
     """
-    A BERT model with dimensionality reduction for getting embeddings. This model does not include a head.
+    BERT model with an additional dimensionality reduction module.
     
     Args:
         config (BertConfig): Configuration for the reduced BERT model. 
-        base_model: The base BERT model to use. If not specified, a new BERT model will be
-            initialized using the config.
-        reduce_module: The dimensionality reduction module to use. If not specified, a new
-            module will be initialized using the config.
+        base_model: The base BERT model to use.
+        reduce_module: The dimensionality reduction module to use.
     """
     def __init__(self, config=None, base_model=None, reduce_module=None):
         super().__init__(config)
 
-        self.bert = base_model if base_model is not None else BertModel(self.config)
-        self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.bert = base_model or BertModel(self.config)
+        self.reduce = reduce_module or DimReduce(self.config)
 
         self.post_init()
     
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 
-                output_attentions=None, output_hidden_states=None, return_dict=None):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    def forward(
+        self, 
+        input_ids=None, 
+        attention_mask=None, 
+        token_type_ids=None, 
+        position_ids=None, 
+        head_mask=None, 
+        inputs_embeds=None, 
+        output_attentions=None, 
+        output_hidden_states=None, 
+        return_dict=None
+    ):
+        return_dict = return_dict or self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -94,7 +107,12 @@ class BertReducedModel(BertReducedPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output)
+        reduced_seq = None
+        if self.config.can_reduce_sequence:
+            reduced_seq = self.reduce(sequence_output)
+        reduced_pooled = None
+        if self.config.can_reduce_pooled:
+            reduced_pooled = self.reduce(pooled_output)
 
         if not return_dict:
             return (reduced_seq, reduced_pooled) + outputs[2:]
@@ -125,15 +143,30 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
     def __init__(self, config=None, base_model=None, reduce_module=None):
         super().__init__(config)
 
-        self.bert = base_model if base_model is not None else BertModel(self.config)
-        self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.bert = base_model or BertModel(self.config)
+        self.reduce = reduce_module or DimReduce(self.config)
         self.cls = BertReducedPreTrainingHeads(self.config)
+
+        self.config.can_reduce_sequence = True
+        self.config.can_reduce_pooled = True
 
         self.post_init()
     
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, 
-                labels=None, next_sentence_label=None, output_attentions=None, output_hidden_states=None, return_dict=None):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        next_sentence_label=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None
+    ):
+        return_dict = return_dict or self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -148,19 +181,29 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        reduced_seq, reduced_pooled = self.reduce(sequence_output), self.reduce(pooled_output)
-        prediction_scores, seq_relationship_score = self.cls(reduced_seq, reduced_pooled)
+        reduced_seq = self.reduce(sequence_output)
+        reduced_pooled = self.reduce(pooled_output)
+        scores = self.cls(reduced_seq, reduced_pooled)
+        prediction_scores, seq_relationship_score = scores
 
         total_loss = None
         if labels is not None and next_sentence_label is not None:
             loss_fct = nn.CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), 
+                labels.view(-1)
+            )
+            next_sentence_loss = loss_fct(
+                seq_relationship_score.view(-1, 2), 
+                next_sentence_label.view(-1)
+            )
             total_loss = masked_lm_loss + next_sentence_loss
 
         if not return_dict:
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
+            if total_loss is not None:
+                output = (total_loss,) + output
+            return output
 
         return BertForPreTrainingOutput(
             loss=total_loss,
@@ -177,31 +220,41 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
 
     Args:
         config (BertConfig): Configuration for the reduced BERT model. 
-        base_model: The base BERT model to use. If not specified, a new BERT model will be
-            initialized using the config.
-        reduce_module: The dimensionality reduction module to use. If not specified, a new
-            module will be initialized using the config.
+        base_model: The base BERT model to use.
+        reduce_module: The dimensionality reduction module to use.
     """
     def __init__(self, config=None, base_model=None, reduce_module=None):
         super().__init__(config)
 
         # Initialize the config for sequence classification
-        if not hasattr(self.config, 'classifier_dropout') or self.config.classifier_dropout is None:
+        if not hasattr(self.config, 'classifier_dropout') or \
+                self.config.classifier_dropout is None:
             self.config.classifier_dropout = self.config.hidden_dropout_prob
         if not hasattr(self.config, 'num_labels'):
             self.config.num_labels = 2
         
-        self.bert = base_model if base_model is not None else BertModel(self.config)
-        self.reduce = reduce_module if reduce_module is not None else DimReduce(self.config)
+        self.bert = base_model or BertModel(self.config)
+        self.reduce = reduce_module or DimReduce(self.config)
         self.dropout = nn.Dropout(self.config.classifier_dropout)
-        self.classifier = nn.Linear(self.config.reduced_size, self.config.num_labels)
+        self.classifier = nn.Linear(self.config.reduced_size, 
+                                    self.config.num_labels)
         
         self.post_init()
 
-
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                labels=None, output_attentions=None, output_hidden_states=None, return_dict=None):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None
+    ):
+        return_dict = return_dict or self.config.use_return_dict
         
         outputs = self.bert(
             input_ids,
@@ -217,14 +270,17 @@ class BertReducedForSequenceClassification(BertReducedPreTrainedModel):
 
         pooler_output = outputs[1]
         reduced_output = self.reduce(pooler_output)
-        reduced_output = self.dropout(reduced_output)
-        logits = self.classifier(reduced_output)
+        logits = self.classifier(self.dropout(reduced_output))
 
-        loss = sequence_classification_loss(logits, labels, self.config) if labels is not None else None
+        loss = None
+        if labels is not None:
+            loss = sequence_classification_loss(logits, labels, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            if loss is not None:
+                output = (loss,) + output
+            return output
 
         return SequenceClassifierOutput(
             loss=loss,

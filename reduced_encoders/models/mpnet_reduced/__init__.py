@@ -3,8 +3,6 @@ from .modeling_mpnet_reduced import (
     MPNetReducedModel,
     MPNetReducedForSequenceClassification,
     MPNetCompressedForPretraining,
-    MPNetCompressedModel,
-    MPNetCompressedForSequenceClassification
 )
 from .configuration_mpnet_reduced import MPNetReducedConfig
 from . import register_mpnet_reduced

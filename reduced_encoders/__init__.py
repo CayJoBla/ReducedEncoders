@@ -9,8 +9,6 @@ from .models import (
     MPNetReducedModel,
     MPNetReducedForSequenceClassification,
     MPNetCompressedForPretraining,
-    MPNetCompressedModel,
-    MPNetCompressedForSequenceClassification
 )
 from .modeling_reduced import (
     DimReshape,

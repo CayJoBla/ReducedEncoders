@@ -4,7 +4,7 @@ from transformers import BertConfig
 from ...configuration_reduced import ReducedConfig
 
 class BertReducedConfig(ReducedConfig, BertConfig):
-    """This class wraps the BertConfig class to add the dimensionality reduction parameters."""
+    """Wrapper for BertConfig to add dimensionality reduction parameters."""
 
     model_type = "bert_reduced"
 

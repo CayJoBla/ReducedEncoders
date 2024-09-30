@@ -2,9 +2,15 @@
 
 from torch import nn
 from collections import OrderedDict
-from transformers import PreTrainedModel, AutoConfig, PretrainedConfig, AutoModel
 from transformers.activations import ACT2FN
-import warnings
+from transformers import (
+    PreTrainedModel,
+    PretrainedConfig,
+    AutoModel,
+    AutoConfig,
+)
+
+from .configuration_reduced import ReducedConfig
 
 
 class DimReshape(nn.Module):
@@ -30,70 +36,68 @@ class DimReshape(nn.Module):
 
 class DimReduce(nn.Sequential):
     """
-    Module to insert between the base transformer model and the model head in order to reduce 
-    the dimensionality of the hidden states. Uses the hidden_activation parameter, the 
-    hidden_size parameter, and the custom reduction_sizes parameter from the base model 
-    configuration.
+    Module to insert between the base transformer model and the model head in 
+    order to reduce the dimensionality of the hidden states.
 
     Args:
-        config (PretrainedConfig): Configuration for the base model. Should include the hidden_size
-            and reduction_sizes parameters for the dimensions of each layer of this module.
-        modules (OrderedDict): An optional ordered dictionary of modules to load the reduction
-            layers from. If not specified, the reduction layers will be randomly initialized, 
-            using the sizes from the reduction_sizes parameter in the configuration.
+        config (PretrainedConfig): Configuration for the base model. 
+            Should include the hidden_size and reduction_sizes parameters.
+        modules (OrderedDict): An optional ordered dictionary of modules from
+            which to load the reduction layers.
     """
     def __init__(self, config, modules=None):
         input_size = config.hidden_size
         self.reduction_sizes = config.reduction_sizes
-        DimReduceLayer = DimReshape     # Pick the layer type to use for the reduction layers
+        DimReduceLayer = DimReshape     # Default reshape layer
         
         if modules is None:
             modules = OrderedDict()
             for i, reduction_size in enumerate(self.reduction_sizes):   
-                modules[str(i)] = DimReduceLayer(input_size, reduction_size, config)
+                modules[str(i)] = DimReduceLayer(input_size, reduction_size, 
+                                                    config)
                 input_size = reduction_size
         elif not isinstance(modules, OrderedDict):
-            modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
+            modules = OrderedDict(
+                [(str(idx), module) for idx, module in enumerate(modules)]
+            )
     
         super().__init__(modules)
 
 
 class DimExpand(nn.Sequential):
-    """A module used during pretraining of a compressed model that transforms the 
-    reduced embeddings back into full-size model embeddings with the goal of matching 
-    the original embeddings as closely as possible.
-
-    The structure of the model closely follows that of the DimReduce module, but reverses
-    the order of the reduction_sizes parameter for the intermediate layer sizes to go from
-    smallest to largest instead of largest to smallest.
+    """A module used during pretraining of a compressed model for reconstructing 
+    the full-size hidden states.
 
     Args:
-        config (PretrainedConfig): Configuration for the base model. Should include the hidden_size
-            and reduction_sizes parameters for the dimensions of each layer of this module.
-        modules (OrderedDict): An optional ordered dictionary of modules to load the expansion
-            layers from. If not specified, the expansion layers will be randomly initialized, 
-            using the sizes from the reduction_sizes parameter in the configuration.
+        config (PretrainedConfig): Configuration for the base model. 
+            Should include the hidden_size and reduction_sizes parameters.
+        modules (OrderedDict): An optional ordered dictionary of modules from 
+            which to load the expansion layers. 
     """
     def __init__(self, config, modules=None):
         input_size = config.reduced_size
-        self.expansion_sizes = config.reduction_sizes[-2::-1] + [config.hidden_size]
-        DimExpandLayer = DimReshape    # Pick the layer type to use for the expansion layers
+        self.expansion_sizes = config.reduction_sizes[-2::-1] 
+        self.expansion_sizes.append(config.hidden_size)
+        DimExpandLayer = DimReshape     # Default reshape layer
         
         if modules is None:
             modules = OrderedDict()
-            for i, decoding_size in enumerate(self.expansion_sizes):   
-                modules[str(i)] = DimExpandLayer(input_size, decoding_size, config)
+            for i, expansion_size in enumerate(self.expansion_sizes):   
+                modules[str(i)] = DimExpandLayer(input_size, expansion_size, 
+                                                    config)
                 input_size = decoding_size
         elif not isinstance(modules, OrderedDict):
-            modules = OrderedDict([(str(idx), module) for idx, module in enumerate(modules)])
+            modules = OrderedDict(
+                [(str(idx), module) for idx, module in enumerate(modules)]
+            )
     
         super().__init__(modules)
 
 
 class DimReduceLoader(PreTrainedModel):
-    """A wrapper for the DimReduce module to load the pretrained reduction weights from a 
-    Huggingface hub model. This module is not meant to be run or included in a model."""
-    # These class values must remain unassigned so that the base_model_prefix is not used
+    """Used for loading only the dimensionality reduction module from a 
+    pretrained model checkpoint. 
+    """
     config_class = None
     base_model_prefix = ""
 
@@ -103,7 +107,8 @@ class DimReduceLoader(PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
-        config = kwargs.pop('config', AutoConfig.from_pretrained(*args, **kwargs))
+        config = kwargs.pop('config', 
+                            AutoConfig.from_pretrained(*args, **kwargs))
         return super().from_pretrained(*args, config=config, **kwargs).reduce
 
 
@@ -117,57 +122,94 @@ class ReducedPreTrainedModel(PreTrainedModel):
         super().__init__(config)
 
     def load_reduction(self, reduction_model_name_or_path, *args, **kwargs):
-        """Load the weights of a pretrained dimensionality reduction module into the reduced model."""
-        self.reduce = DimReduceLoader.from_pretrained(reduction_model_name_or_path, *args, **kwargs)
+        """Load the weights of a pretrained dimensionality reduction module
+        into the reduced model.
+        """
+        self.reduce = DimReduceLoader.from_pretrained(
+                                reduction_model_name_or_path, *args, **kwargs
+                            )
+
+    def _init_weights(self, module):
+        """Default weight initialization."""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, 
+                                        std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, 
+                                        std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        
 
     @staticmethod
     def _is_reduced_model(config):
         """Determine whether a model is a reduced model from the config."""
-        # TODO: May need an update for resiliency to changes in config / other configs with those parameters
-        return "reduction_sizes" in config.__dict__ or "reduced_size" in config.__dict__
+        return issubclass(config.__class__, ReducedConfig)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, reduce_module=None, 
-                        base_model_class=None, **kwargs):
+    def from_pretrained(
+        cls, 
+        pretrained_model_name_or_path, 
+        *model_args, 
+        reduce_module=None, 
+        base_model_class=None, 
+        **kwargs
+    ):
         # Load the config for the model (potentially a base model config)
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        is_reduced_model = cls._is_reduced_model(config)
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path,
+                                            **kwargs)
 
         # Update config with provided parameters
         if "config" in kwargs: 
             config.__dict__.update(kwargs.pop("config").__dict__)
 
-        # Load the model (different depending on whether this is a reduced model or not)
-        if is_reduced_model:
-            model = super(ReducedPreTrainedModel, cls).from_pretrained(pretrained_model_name_or_path, 
-                                                                       *model_args, config=config, **kwargs)
+        # Load the model 
+        if cls._is_reduced_model(config):
+            model = super(ReducedPreTrainedModel, cls).from_pretrained(
+                pretrained_model_name_or_path, 
+                *model_args, 
+                config=config, 
+                **kwargs
+            )
         else:
             # Load the base model
             if base_model_class is not None:
-                base_model = base_model_class.from_pretrained(pretrained_model_name_or_path, 
-                                                                *model_args, config=config, **kwargs)
+                base_model = base_model_class.from_pretrained(
+                    pretrained_model_name_or_path, 
+                    *model_args, 
+                    config=config, 
+                    **kwargs
+                )
             else:
-                base_model = AutoModel.from_pretrained(pretrained_model_name_or_path, 
-                                                        *model_args, config=config, **kwargs)
+                base_model = AutoModel.from_pretrained(
+                    pretrained_model_name_or_path, 
+                    *model_args, 
+                    config=config, 
+                    **kwargs
+                    )
 
             # Load the reduction module (if specified)
             if reduce_module is not None: 
                 if type(reduce_module) is not DimReduce:
-                    reduce_config = AutoConfig.from_pretrained(reduce_module, **kwargs)
-                    reduce_module = DimReduceLoader.from_pretrained(reduce_module, config=reduce_config)
+                    reduce_config = AutoConfig.from_pretrained(
+                                        reduce_module, **kwargs)
+                    reduce_module = DimReduceLoader.from_pretrained(
+                                        reduce_module, config=reduce_config)
 
-                # Currently, overrides the base model reduce configuration params from the structure of reduce_module
+                # Override base model config from the structure of reduce_module
+                # TODO: Consider modifying reduce_module to account for config
                 config.reduction_sizes = reduce_module.reduction_sizes
                 config.reduced_size = reduce_module.reduction_sizes[-1]
-
-                model = cls(config=config, base_model=base_model, reduce_module=reduce_module)
-            else:
-                warnings.warn(f"The {cls.__name__} model is intended to have a dimensionality reduction "
-                                "module, but was loaded from a pretrained model without reduction. Loading "
-                                "the model with a randomly intialized reduction. To change this, either "
-                                "specify the `reduction_model_name_or_path` argument when loading from a "
-                                "pretrained model, or load a reduction separately using the `load_reduction()` "
-                                "method.")
-                model = cls(config=config, base_model=base_model, reduce_module=reduce_module)
+            
+            model = cls(
+                config=config, 
+                base_model=base_model, 
+                reduce_module=reduce_module
+            )
         
         return model
