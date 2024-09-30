@@ -10,7 +10,7 @@ class ReducedConfig(PretrainedConfig):
         self, 
         *args, 
         reduction_sizes=[512,256,128,68,48], 
-        can_reduce_sequence=False,
+        can_reduce_sequence=True,
         can_reduce_pooled=False,
         **kwargs
     ):

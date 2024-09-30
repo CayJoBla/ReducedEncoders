@@ -85,7 +85,7 @@ class DimExpand(nn.Sequential):
             for i, expansion_size in enumerate(self.expansion_sizes):   
                 modules[str(i)] = DimExpandLayer(input_size, expansion_size, 
                                                     config)
-                input_size = decoding_size
+                input_size = expansion_size
         elif not isinstance(modules, OrderedDict):
             modules = OrderedDict(
                 [(str(idx), module) for idx, module in enumerate(modules)]
