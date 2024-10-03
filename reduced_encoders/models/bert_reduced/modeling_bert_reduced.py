@@ -140,6 +140,9 @@ class BertReducedForPreTraining(BertReducedPreTrainedModel):
         reduce_module: The dimensionality reduction module to use. If not specified, a new
             module will be initialized using the config.
     """
+    
+    _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config=None, base_model=None, reduce_module=None):
         super().__init__(config)
 
