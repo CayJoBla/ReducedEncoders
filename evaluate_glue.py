@@ -246,7 +246,7 @@ def evaluation(
                 predictions = np.argmax(predictions, axis=1)
 
             output_predict_file = os.path.join(output_dir, 
-                                                f"{task_to_name[task]}.tsv")
+                                                f"{task_to_name[subtask]}.tsv")
             if trainer.is_world_process_zero():
                 with open(output_predict_file, "w") as writer:
                     writer.write("index\tprediction\n")
