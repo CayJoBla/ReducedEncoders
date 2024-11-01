@@ -28,9 +28,9 @@ class DimReshape(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         
     def forward(self, x):
-        output = self.linear(x)
         output = self.activation(output)
         output = self.dropout(output)
+        output = self.linear(x)
         return output
 
 
