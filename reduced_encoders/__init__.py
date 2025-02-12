@@ -9,6 +9,13 @@ from .models import (
     MPNetReducedModel,
     MPNetReducedForSequenceClassification,
     MPNetCompressedForPretraining,
+    # MatryoshkaConfig,
+    # MatryoshkaForSequenceClassification,
+    Qwen2ReducedConfig,
+    Qwen2ReducedPreTrainedModel,
+    Qwen2ReducedModel,
+    Qwen2CompressedForPretraining,
+    # Qwen2ReducedForSequenceClassification,
 )
 from .modeling_reduced import (
     DimReshape,

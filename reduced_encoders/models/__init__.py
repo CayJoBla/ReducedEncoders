@@ -12,3 +12,14 @@ from .mpnet_reduced import (
     MPNetCompressedForPretraining,
     MPNetReducedConfig, 
 )
+# from .matryoshka import (
+#     MatryoshkaConfig, 
+#     MatryoshkaForSequenceClassification, 
+# )
+from .qwen2_reduced import (
+    Qwen2ReducedPreTrainedModel,
+    Qwen2ReducedModel,
+    Qwen2CompressedForPretraining,
+    # Qwen2ReducedForSequenceClassification,
+    Qwen2ReducedConfig
+)

@@ -25,7 +25,12 @@ class DimReshape(nn.Module):
             self.activation = ACT2FN[config.hidden_act]
         else:
             self.activation = config.hidden_act
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        dropout_prob = 0.0
+        if hasattr(config, 'hidden_dropout_prob'):
+            dropout_prob = config.hidden_dropout_prob
+        elif hasattr(config, 'attention_dropout'):
+            dropout_prob = config.attention_dropout
+        self.dropout = nn.Dropout(dropout_prob)
         
     def forward(self, x):
         output = self.linear(x)
@@ -126,8 +131,8 @@ class ReducedPreTrainedModel(PreTrainedModel):
         into the reduced model.
         """
         self.reduce = DimReduceLoader.from_pretrained(
-                                reduction_model_name_or_path, *args, **kwargs
-                            )
+                            reduction_model_name_or_path, *args, **kwargs
+                        )
 
     def _init_weights(self, module):
         """Default weight initialization."""
@@ -163,13 +168,14 @@ class ReducedPreTrainedModel(PreTrainedModel):
         # Load the config for the model (potentially a base model config)
         config = AutoConfig.from_pretrained(pretrained_model_name_or_path,
                                             **kwargs)
+        pretrained_is_reduced = cls._is_reduced_model(config)
 
         # Update config with provided parameters
         if "config" in kwargs: 
-            config.__dict__.update(kwargs.pop("config").__dict__)
+            config = kwargs.pop("config")
 
         # Load the model 
-        if cls._is_reduced_model(config):
+        if pretrained_is_reduced:
             model = super(ReducedPreTrainedModel, cls).from_pretrained(
                 pretrained_model_name_or_path, 
                 *model_args, 
@@ -191,7 +197,7 @@ class ReducedPreTrainedModel(PreTrainedModel):
                     *model_args, 
                     config=config, 
                     **kwargs
-                    )
+                )
 
             # Load the reduction module (if specified)
             if reduce_module is not None: 

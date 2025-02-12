@@ -46,7 +46,7 @@ class SentencePooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.pooling_mode = config.pooling_mode
-        if self.pooling_mode not in ["mean", "max", "cls"]:
+        if self.pooling_mode not in ["mean", "max", "cls", "last"]:
             raise ValueError(f"Unsupported pooling mode: {self.pooling_mode}")
 
     def forward(self, hidden_states, attention_mask):
@@ -61,3 +61,11 @@ class SentencePooler(nn.Module):
             return torch.max(hidden_states, 1)[0]
         elif self.pooling_mode == "cls":
             return hidden_states[:, 0]
+        elif self.pooling_mode == "last":
+            left_padding = (attention_mask[:, -1].sum() == attention_mask.shape[0])
+            if left_padding:
+                return hidden_states[:, -1]
+            else:   # Pool by the last non-padding token
+                sequence_lengths = attention_mask.sum(dim=1) - 1
+                batch_size = hidden_states.shape[0]
+                return hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]

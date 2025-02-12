@@ -16,7 +16,7 @@ class ReducedConfig(PretrainedConfig):
     ):
         super().__init__(*args, **kwargs)
         self.reduction_sizes = reduction_sizes
-        self.reduced_size = reduction_sizes[-1]
+        self.reduced_size = reduction_sizes[-1] if reduction_sizes else self.hidden_size
 
         # Models for reduction pretraining should specify these parameters
         self.can_reduce_sequence = can_reduce_sequence
