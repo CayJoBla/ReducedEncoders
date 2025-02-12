@@ -9,7 +9,7 @@ class ReducedConfig(PretrainedConfig):
     def __init__(
         self, 
         *args, 
-        reduction_sizes=[512,256,128,68,48], 
+        reduction_sizes=None, 
         can_reduce_sequence=True,
         can_reduce_pooled=False,
         **kwargs

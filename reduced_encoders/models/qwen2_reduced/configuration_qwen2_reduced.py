@@ -11,8 +11,8 @@ class Qwen2ReducedConfig(ReducedConfig, Qwen2Config):
     def __init__(
         self, 
         *args, 
-        reduction_sizes=[3584,2048,1536,1024,768,512,384,256,128,64], 
-        pooling_mode="last",
+        reduction_sizes = [3584,2048,1536,1024,768,512,384,256,128,64], 
+        pooling_mode = "last",
         **kwargs
     ):
         super().__init__(*args, reduction_sizes=reduction_sizes, **kwargs)

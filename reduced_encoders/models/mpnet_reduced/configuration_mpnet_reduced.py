@@ -8,6 +8,12 @@ class MPNetReducedConfig(ReducedConfig, MPNetConfig):
 
     model_type = "mpnet_reduced"
 
-    def __init__(self, *args, pooling_mode="mean", **kwargs):
+    def __init__(
+        self, 
+        *args, 
+        reduction_sizes = [512,256,128,68,48], 
+        pooling_mode = "mean", 
+        **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.pooling_mode = pooling_mode

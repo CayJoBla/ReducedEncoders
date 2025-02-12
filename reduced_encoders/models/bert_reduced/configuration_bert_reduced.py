@@ -8,5 +8,10 @@ class BertReducedConfig(ReducedConfig, BertConfig):
 
     model_type = "bert_reduced"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, 
+        *args, 
+        reduction_sizes = [512,256,128,68,48], 
+        **kwargs
+    ):
+        super().__init__(*args, reduction_sizes=reduction_sizes, **kwargs)
