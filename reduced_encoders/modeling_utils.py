@@ -17,6 +17,34 @@ def compressed_contrastive_loss(full_embeddings, reduced_embeddings):
     reduced_similarity = get_cos_sim(reduced_embeddings)
     return mse_loss(full_similarity, reduced_similarity)
 
+def dimensional_distillation_loss(
+    full_embeddings, 
+    reduced_embeddings, 
+    reconstructed_embeddings, 
+    alpha=0.5, 
+    beta=0.5, 
+    do_regularization=True
+):
+    # Compute contrastive loss
+    contrastive_loss = 0
+    if alpha > 0:
+        contrastive_loss = compressed_contrastive_loss(
+                                full_embeddings, reduced_embeddings)
+
+    # Compute reconstruction loss
+    reconstruction_loss = 0
+    if beta > 0:
+        reconstruction_loss = mse_loss(full_embeddings, reconstructed_embeddings)
+
+    # Compute total loss (w1*l1 + w2*l2 - 1/2 log(w1*w2))
+    regularization = 0 
+    if do_regularization and alpha > 0 and beta > 0:
+        regularization = -.5*torch.log(alpha * beta)
+
+    loss = alpha*contrastive_loss + beta*reconstruction_loss + regularization
+    return loss, contrastive_loss, reconstruction_loss
+
+
 def sequence_classification_loss(logits, labels, config):
     """Compute the sequence classification loss for the given model."""
     # Determine the problem type if not specified

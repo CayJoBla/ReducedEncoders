@@ -211,6 +211,13 @@ class ReducedPreTrainedModel(PreTrainedModel):
                 # TODO: Consider modifying reduce_module to account for config
                 config.reduction_sizes = reduce_module.reduction_sizes
                 config.reduced_size = reduce_module.reduction_sizes[-1]
+
+            # TODO: Currently, no warning is given when loading a base model 
+            #       without a reduction. Should warn the user that reduction 
+            #       weights are randomly initialized.
+
+            # TODO: There is another issue where reduced model specific kwargs
+            #       are passed to the base model when loading from pretrained.
             
             model = cls(
                 config=config, 

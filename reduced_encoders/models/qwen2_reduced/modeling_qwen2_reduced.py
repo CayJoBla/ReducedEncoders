@@ -27,7 +27,6 @@ class Qwen2ReducedPreTrainedModel(ReducedPreTrainedModel):
     """An abstract class for defining defaults for reduced BERT models."""
     config_class = Qwen2ReducedConfig
     base_model_prefix = "qwen2"
-    _supports_sdpa = True
 
 
 class Qwen2CompressedForPretraining(Qwen2ReducedPreTrainedModel):
@@ -52,7 +51,6 @@ class Qwen2CompressedForPretraining(Qwen2ReducedPreTrainedModel):
         self.do_reconstruction = do_reconstruction
 
         # Construct the model
-        kwargs['add_pooling_layer'] = False     # We use our own pooling instead
         self.qwen2 = base_model or Qwen2Model(self.config, **kwargs)
         self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
@@ -65,8 +63,6 @@ class Qwen2CompressedForPretraining(Qwen2ReducedPreTrainedModel):
             'reconstruction_weight': nn.Parameter(torch.tensor(.5), 
                                         requires_grad=do_reconstruction),
         })
-
-        # TODO: Do I need to call self.post_init() here?
 
     def get_extra_logging_dict(self):
         """Returns a dictionary of extra parameters to log during training."""
@@ -174,7 +170,6 @@ class Qwen2ReducedModel(Qwen2ReducedPreTrainedModel):
     ):
         super().__init__(config)
 
-        kwargs['add_pooling_layer'] = False # We use our own pooling instead
         self.qwen2 = base_model or Qwen2Model(self.config, **kwargs)
         self.pooler = SentencePooler(self.config)
         self.reduce = reduce_module or DimReduce(self.config)
