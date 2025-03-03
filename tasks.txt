@@ -1,0 +1,66 @@
+─────────────────────────────── Selected tasks  ────────────────────────────────
+Classification
+    - EmotionClassification, s2s
+    - ImdbClassification, p2p
+    - MTOPDomainClassification, s2s, multilingual 1 / 6 Subsets
+    - MTOPIntentClassification, s2s, multilingual 1 / 6 Subsets
+    - MassiveIntentClassification, s2s, multilingual 1 / 51 Subsets
+    - MassiveScenarioClassification, s2s, multilingual 1 / 51 Subsets
+    - ToxicConversationsClassification, s2s
+    - TweetSentimentExtractionClassification, s2s
+    - AmazonCounterfactualClassification, s2s, multilingual 1 / 4 Subsets
+
+
+Clustering
+    - MedrxivClusteringP2P, p2p
+    - MedrxivClusteringS2S, s2s
+    - RedditClustering, s2s
+    - RedditClusteringP2P, p2p
+    - StackExchangeClustering, s2s
+    - StackExchangeClusteringP2P, p2p
+    - TwentyNewsgroupsClustering, s2s
+
+
+PairClassification
+    - SprintDuplicateQuestions, s2s
+    - TwitterSemEval2015, s2s
+    - TwitterURLCorpus, s2s
+
+
+Reranking
+    - MindSmallReranking, s2s
+    - SciDocsRR, s2s
+    - StackOverflowDupQuestions, s2s
+
+
+Retrieval
+    - CQADupstackRetrieval, None    # TODO: MAY NOT HAVE FINISHED
+    - ClimateFEVER, s2p
+    - DBPedia, s2p
+    - FEVER, s2p
+    - FiQA2018, s2p
+    - HotpotQA, s2p
+    - NFCorpus, s2p
+    - NQ, s2p
+    - QuoraRetrieval, s2s
+    - SCIDOCS, s2p
+    - SciFact, s2p
+    - TRECCOVID, s2p
+    - Touche2020, s2p
+    - MSMARCO, s2p
+
+
+STS
+    - SICK-R, s2s
+    - STS12, s2s
+    - STS13, s2s
+    - STS14, s2s
+    - STS15, s2s
+    - STS16, s2s
+    - STSBenchmark, s2s
+    - STS17, s2s, multilingual 1 / 11 Subsets
+    - STS22, p2p, multilingual 1 / 18 Subsets
+
+
+Summarization
+    - SummEval, p2p
