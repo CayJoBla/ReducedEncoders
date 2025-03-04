@@ -5,8 +5,9 @@ huggingface_hub==0.29.1
 matplotlib==3.8.4
 mteb==1.35.2
 networkx==3.3
-numpy==2.2.3
+numpy==1.26.4
 scipy==1.15.2
 sentence_transformers==3.4.1
-torch==2.2.1+cu121
+torch==2.2.1
 transformers==4.49.0
+wandb==0.17.0
