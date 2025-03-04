@@ -1,3 +1,15 @@
+#!/bin/bash
+
+#SBATCH --time=24:00:00   # walltime
+#SBATCH --ntasks=1   # number of processor cores (i.e. tasks)
+#SBATCH --nodes=1   # number of nodes
+#SBATCH --gpus=4
+#SBATCH --mem-per-cpu=65536M   # memory per CPU core
+#SBATCH -J "qwen2-reduced-pretrain"   # job name
+#SBATCH --mail-user=cayjobla@byu.edu   # email address
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+
 export WANDB_MODE="disabled"
 python multiprocess_compressed_train.py \
     --model "Alibaba-NLP/gte-Qwen1.5-7B-instruct" \
