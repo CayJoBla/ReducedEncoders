@@ -1,4 +1,17 @@
-WANDB_PROJECT="qwen2-compressed" \
+#!/bin/bash
+
+#SBATCH --time=72:00:00   # walltime
+#SBATCH --ntasks=1   # number of processor cores (i.e. tasks)
+#SBATCH --nodes=1   # number of nodes
+#SBATCH --gpus=2
+#SBATCH --mem-per-cpu=65536M   # memory per CPU core
+#SBATCH -J "qwen2-reduced-pretrain"   # job name
+#SBATCH --mail-user=cayjobla@byu.edu   # email address
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+
+export WANDB_MODE="offline"
+export WANDB_PROJECT="qwen2-compressed"
 # CUDA_VISIBLE_DEVICES="0" \
 python train_compressed_qwen.py \
     --model cayjobla/gte-Qwen1.5-7B-instruct-reduced \
