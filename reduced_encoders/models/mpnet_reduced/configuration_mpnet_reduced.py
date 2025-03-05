@@ -15,5 +15,5 @@ class MPNetReducedConfig(ReducedConfig, MPNetConfig):
         pooling_mode = "mean", 
         **kwargs
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, reduction_sizes=reduction_sizes, **kwargs)
         self.pooling_mode = pooling_mode
