@@ -23,3 +23,10 @@ from .qwen2_reduced import (
     # Qwen2ReducedForSequenceClassification,
     Qwen2ReducedConfig
 )
+from .mistral_reduced import (
+    MistralReducedPreTrainedModel,
+    MistralReducedModel,
+    MistralCompressedForPretraining,
+    # MistralReducedForSequenceClassification,
+    MistralReducedConfig
+)

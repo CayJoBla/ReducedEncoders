@@ -97,3 +97,50 @@ class SentencePooler(nn.Module):
                 sequence_lengths = attention_mask.sum(dim=1) - 1
                 batch_size = hidden_states.shape[0]
                 return hidden_states[torch.arange(batch_size, device=hidden_states.device), sequence_lengths]
+
+class UnsupervisedCosineSimilarityLoss(nn.Module):
+    """Compares the cosine similarity between sentence embeddings to the cosine
+    similarity of label embeddings. Useful for comparing similarity scores of
+    embeddings with different dimensons.
+    """
+    def __init__(
+        self,
+        similarity_fn: nn.Module = nn.CosineSimilarity(dim=-1), # TODO: Consider CoSENTLoss or AnglELoss
+        loss_fn: nn.Module = nn.MSELoss(reduction="mean")
+    ):
+        super().__init__()
+        self.similarity_fn = similarity_fn
+        self.loss_fn = loss_fn
+
+    def get_similarity_scores(self, sentence_embeddings: torch.Tensor):
+        similarity_matrix = self.similarity_fn(
+            sentence_embeddings.unsqueeze(0),
+            sentence_embeddings.unsqueeze(1)
+        )
+        indices = torch.triu_indices(*similarity_matrix.shape, offset=1)
+        return similarity_matrix[indices[0], indices[1]] 
+        
+    def forward(self, sentence_embeddings: torch.Tensor, labels: torch.Tensor):
+        with torch.no_grad():
+            true_similarities = self.get_similarity_scores(labels)
+        predicted_similarities = self.get_similarity_scores(sentence_embeddings)
+        return self.loss_fn(predicted_similarities, true_similarities)
+
+class DimensionalReductionLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.cosine_similarity_loss = UnsupervisedCosineSimilarityLoss()
+        self.reconstruction_loss = nn.MSELoss(reduction="mean")
+        self.weights = nn.Parameter(torch.tensor([.5,.5]), requires_grad=True)
+
+    def forward(self, 
+        sentence_embeddings: torch.Tensor, 
+        reconstructed_embeddings: torch.Tensor, 
+        labels: torch.Tensor
+    ):
+        a, b = self.weights
+        l_c = self.cosine_similarity_loss(sentence_embeddings, labels)
+        l_r = self.reconstruction_loss(reconstructed_embeddings, labels)
+        loss = (a * l_c) + (b * l_r) - .5*torch.log(a*b)
+        return loss, l_c, l_r
+        

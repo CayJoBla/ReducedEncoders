@@ -1,0 +1,87 @@
+You try to use a model that was created with version 3.5.0.dev0, however, your version is 3.4.1. This might cause unexpected behavior or errors. In that case, try to update to the latest version.
+
+
+
+/home/cayjobla/miniconda3/envs/reduced_encoders/lib/python3.12/site-packages/torch/nn/modules/module.py:1326: UserWarning: Casting complex values to real discards the imaginary part (Triggered internally at ../aten/src/ATen/native/Copy.cpp:308.)
+  return t.to(
+wandb: Currently logged in as: cayjobla. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.19.8 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.17.0
+wandb: Run data is saved locally in /home/cayjobla/ReducedEncoders/wandb/run-20250321_220859-jmdsnfdl
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run neobert-reduced
+wandb: ⭐️ View project at https://wandb.ai/cayjobla/reduced-encoders
+wandb: 🚀 View run at https://wandb.ai/cayjobla/reduced-encoders/runs/jmdsnfdl
+Loaded model: tomaarsen/NeoBERT-gooaq-8e-05
+Initialized reduction and expansion layers with sizes: [768, 512, 256, 128, 64, 48]
+Loaded dataset: sentence-transformers/gooaq, split: train[:5%], eval size: 5000
+Initialized DimensionalReductionLoss with weights: tensor([0.5000, 0.5000])
+Initialized optimizer and LR scheduler
+Initialized accelerator
+Starting training loop...
+Epoch: 0.0, Step: 0, Eval Loss: 8.204377839891173
+Epoch: 0.10300358452474147, Step: 2500, Train Loss: 1.1583733558654785
+Epoch: 0.20600716904948294, Step: 5000, Train Loss: 0.8270992040634155
+Epoch: 0.30901075357422436, Step: 7500, Train Loss: 0.872338593006134
+Epoch: 0.41201433809896587, Step: 10000, Train Loss: 0.6336631774902344
+Epoch: 0.5150179226237073, Step: 12500, Train Loss: 0.6980319023132324
+Epoch: 0.6180215071484487, Step: 15000, Train Loss: 0.8930825591087341
+Epoch: 0.7210250916731902, Step: 17500, Train Loss: 0.45167797803878784
+Epoch: 0.8240286761979317, Step: 20000, Train Loss: 0.7091783285140991
+Epoch: 0.9270322607226732, Step: 22500, Train Loss: 0.9147362112998962
+Epoch: 1.0, Step: 24271, Eval Loss: 0.6572140436664188
+Epoch: 1.0300358452474145, Step: 25000, Train Loss: 0.48467734456062317
+Epoch: 1.133039429772156, Step: 27500, Train Loss: 0.8647156357765198
+Epoch: 1.2360430142968974, Step: 30000, Train Loss: 0.37309756875038147
+Epoch: 1.339046598821639, Step: 32500, Train Loss: 0.9288781881332397
+Epoch: 1.4420501833463804, Step: 35000, Train Loss: 0.5833727121353149
+Epoch: 1.5450537678711218, Step: 37500, Train Loss: 0.9877023696899414
+Epoch: 1.6480573523958635, Step: 40000, Train Loss: 0.6110506057739258
+Epoch: 1.751060936920605, Step: 42500, Train Loss: 0.41247451305389404
+Epoch: 1.8540645214453464, Step: 45000, Train Loss: 0.5413566827774048
+Epoch: 1.9570681059700878, Step: 47500, Train Loss: 0.61542809009552
+Epoch: 2.0, Step: 48542, Eval Loss: 0.5826262419315265
+Epoch: 2.060071690494829, Step: 50000, Train Loss: 0.9937487840652466
+Epoch: 2.1630752750195708, Step: 52500, Train Loss: 0.37068942189216614
+Epoch: 2.266078859544312, Step: 55000, Train Loss: 0.4789310693740845
+Epoch: 2.3690824440690537, Step: 57500, Train Loss: 1.0247390270233154
+Epoch: 2.472086028593795, Step: 60000, Train Loss: 0.8948676586151123
+Epoch: 2.5750896131185366, Step: 62500, Train Loss: 0.6104353666305542
+Epoch: 2.678093197643278, Step: 65000, Train Loss: 0.6670026779174805
+Epoch: 2.7810967821680195, Step: 67500, Train Loss: 0.2884165048599243
+Epoch: 2.8841003666927607, Step: 70000, Train Loss: 0.48531848192214966
+Epoch: 2.9871039512175024, Step: 72500, Train Loss: 0.8515165448188782
+Epoch: 3.0, Step: 72813, Eval Loss: 0.5320771721412809
+wandb: - 0.014 MB of 0.014 MB uploadedwandb: \ 0.014 MB of 0.023 MB uploadedwandb: 
+wandb: Run history:
+wandb:        eval/cosine_sim_loss █▁▁▁
+wandb:                   eval/loss █▁▁▁
+wandb:    eval/reconstruction_loss █▄▂▁
+wandb:       train/cosine_sim_loss ▄▄▆▄▅▇▂▅▇▃▇▁█▄█▄▂▃▄█▂▃█▇▄▅▁▃▆
+wandb:     train/cosine_sim_weight ▁▂▃▄▅▄▄▅▅▅▅▆▅▆▅▅▆▇█▇▇▇▇▇▇█▇▇▇
+wandb:                 train/epoch ▁▁▁▂▂▂▂▃▃▃▃▃▄▄▄▄▅▅▅▅▆▆▆▆▆▇▇▇▇▇███
+wandb:           train/global_step ▁▁▁▂▂▂▂▃▃▃▃▃▄▄▄▄▅▅▅▅▆▆▆▆▆▇▇▇▇▇███
+wandb:         train/learning_rate ███▇▇▇▇▆▆▆▅▅▅▅▅▄▄▄▄▃▃▃▃▂▂▂▂▁▁
+wandb:                  train/loss █▅▆▄▄▆▂▄▆▃▆▂▆▃▇▄▂▃▄▇▂▃▇▆▄▄▁▃▆
+wandb:   train/reconstruction_loss ▅█▇▅▆▅▄▃▆▄▅▆▃▄▅▂▇▃█▃▁▄▅▆█▄▅▂▄
+wandb: train/reconstruction_weight █▄▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb: 
+wandb: Run summary:
+wandb:        eval/cosine_sim_loss 0.02703
+wandb:                   eval/loss 0.53208
+wandb:    eval/reconstruction_loss 14.2679
+wandb:       train/cosine_sim_loss 0.04654
+wandb:     train/cosine_sim_weight 15.31106
+wandb:                 train/epoch 3.0
+wandb:           train/global_step 72813
+wandb:         train/learning_rate 0.0
+wandb:                  train/loss 0.85152
+wandb:   train/reconstruction_loss 14.87012
+wandb: train/reconstruction_weight 0.03425
+wandb: 
+wandb: 🚀 View run neobert-reduced at: https://wandb.ai/cayjobla/reduced-encoders/runs/jmdsnfdl
+wandb: ⭐️ View project at: https://wandb.ai/cayjobla/reduced-encoders
+wandb: Synced 6 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20250321_220859-jmdsnfdl/logs
+train_neobert.sh: line 4: y: command not found
