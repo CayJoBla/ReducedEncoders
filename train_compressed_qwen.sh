@@ -3,15 +3,19 @@
 #SBATCH --time=72:00:00   # walltime
 #SBATCH --ntasks=1   # number of processor cores (i.e. tasks)
 #SBATCH --nodes=1   # number of nodes
-#SBATCH --gpus=2
+#SBATCH --gpus=1
 #SBATCH --mem-per-cpu=65536M   # memory per CPU core
 #SBATCH -J "qwen2-reduced-pretrain"   # job name
 #SBATCH --mail-user=cayjobla@byu.edu   # email address
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
+#SBATCH --partition=m13h
 
 export WANDB_MODE="offline"
 export WANDB_PROJECT="qwen2-compressed"
+
+nvidia-smi
+
 # CUDA_VISIBLE_DEVICES="0" \
 python train_compressed_qwen.py \
     --model cayjobla/gte-Qwen1.5-7B-instruct-reduced \
@@ -21,7 +25,7 @@ python train_compressed_qwen.py \
     --split "train" \
     --train_size 0.9 \
     --validation_size 0.1 \
-    --batch_size 16 \
+    --batch_size 1 \
     --eval_strategy steps \
     --eval_steps 25000 \
     --save_strategy steps \
